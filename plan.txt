@@ -1,0 +1,263 @@
+DivineMarketplace plan
+======================
+
+This file is an outline of what each major part of the plugin does and how it does it.
+It is intentionally higher level than file-specific TODO comments.
+
+1. Startup / setup layer
+------------------------
+Purpose:
+- create missing folders/files/defaults on first startup
+- generate admin-facing helper files such as permissions.txt
+- leave runtime binary state files intact if they already exist
+
+How it works:
+- main plugin class calls PluginFileInitializer first
+- setup layer creates any missing config/default/log/data files
+- config/data source/registry classes only parse/load existing files
+- on first boot, missing config.yml and category_config.yml are generated from defaults
+- on future boots, category_config.yml is read and categories/<categoryId>.yml is ensured for every configured category
+- missing built-in categories get built-in default mapping files
+- missing non-built-in categories get blank files with:
+  categoryId: <id>
+  items:
+
+2. Main config layer
+--------------------
+Purpose:
+- represent the global plugin behavior/settings from config.yml
+- make those settings accessible everywhere without constructor spam
+
+How it works:
+- MainConfigLoader reads and validates config.yml
+- MainConfig is the typed runtime representation of config.yml only
+- ConfigService stores the current MainConfig as a singleton-style access point
+- most classes should use specific helper getters instead of drilling through a deep config tree
+
+Money rule:
+- internal prices and balances are stored as integer hundredths
+- convert to decimal only at the display/Vault boundary
+
+3. Config / definition layer
+----------------------------
+Purpose:
+- define categories
+- define vanilla/default item placement
+- define custom item placement
+- define custom enchant browse metadata
+- define plugin behavior/settings
+
+How it works:
+- config.yml = behavior/settings/backend choices
+- category_config.yml = top-level category definitions
+- categories/<category>.yml = vanilla/default item mappings for that category
+- custom/custom_items.yml = custom item definitions
+- custom/custom_enchants.yml = custom enchant definitions/overrides
+
+Current icon format truth:
+- top-level category icons use only:
+  - MATERIAL
+  - MATERIAL:FLOAT_MODEL_DATA
+- examples: "STONE" or "STICK:714.0"
+- Java-style float suffixes like F should not appear in config
+
+4. Item resolution layer
+------------------------
+Purpose:
+- resolve a raw ItemStack into stable market-facing identity and behavior
+
+How it works:
+- item resolver determines broad item behavior:
+  - custom item
+  - enchanted book
+  - package/container
+  - vanilla/default item
+  - unresolved/weird item
+- the final resolved output carries:
+  - marketKey
+  - marketDisplayName
+  - categoryId
+  - optional itemType
+  - recommendationEnabled
+  - market history / training participation
+  - browse visibility
+  - review severity
+  - enchant map when relevant
+
+5. Listing layer
+----------------
+Purpose:
+- represent active market entries for sale
+
+How it works:
+- v1 listing uses one held item / one explicit source stack only
+- on confirm, server re-reads the real item from inventory
+- server validates quantity and unit price
+- server removes the item, verifies removal, reserves it, then creates or merges the listing
+- listings.bin stores active listings only
+- listing stores:
+  - listingId
+  - sellerUuid
+  - listedItemSnapshot
+  - amount
+  - marketKey
+  - marketDisplayName
+  - unitPrice
+  - listedAtEpochMillis
+  - listingDurationMillis
+- total price is derived: unitPrice * amount
+- expiration is derived: listedAtEpochMillis + listingDurationMillis
+- if mergeable stock is added to an active listing, amount increases and listedAtEpochMillis is bumped to the newest list time
+- partial buying is supported by reducing amount
+- when amount reaches zero, the listing is removed from listings.bin
+
+6. Claim layer
+--------------
+Purpose:
+- safely hold items or money owed to players after market actions
+
+How it works:
+- item claims and money claims are stored separately in separate bins
+
+Item claims:
+- stored in item_claims.bin
+- model stores:
+  - claimId
+  - ownerUuid
+  - claimItemSnapshot
+  - amount
+  - createdAtEpochMillis
+- similar claims for the same owner may merge
+- merging refreshes createdAtEpochMillis to the newest merge time
+- left click claims one safe stack-sized chunk
+- shift-click claims as much as safely fits in inventory
+- claim is removed when amount reaches zero
+- abandonment is derived from createdAtEpochMillis
+- if item_claims.bin exceeds its soft size limit, only abandoned claims may be purged, oldest abandoned first
+- if nothing is abandoned, do not purge
+
+Money claims:
+- stored in money_claims.bin
+- model stores:
+  - ownerUuid
+  - amount
+- one running money balance exists per player
+- sale proceeds increase the balance
+- /market claim earnings pays the balance out through Vault
+- successful payout drains the stored amount to zero and deletes the record
+- missing record means zero balance
+
+7. History / audit layer
+------------------------
+Purpose:
+- record market actions for admin review, player-facing history, and price training
+
+How it works:
+- binary admin history is mandatory for all market actions
+- admin audit storage is split by purpose:
+  - admin_sales.bin
+  - admin_listings.bin
+  - admin_claims.bin
+- these admin files are cleaned FIFO when their configured size limits are reached
+- player-facing market sale history is stored separately in sales.bin
+- sales.bin holds recent exact sales only and is also cleaned FIFO by size
+- admins can inspect history in game and export readable text reports from binary history
+
+8. Recommendation layer
+-----------------------
+Purpose:
+- maintain suggested prices for market groups
+
+How it works:
+- prices are based on training data only
+- SaleRecord is the player-facing exact-sales dataset and also the source dataset for training
+- every SaleRecord is player-facing history by definition
+- SaleRecord stores:
+  - marketKey
+  - marketDisplayName
+  - soldItemSnapshot
+  - amountPurchased
+  - unitPrice
+  - soldAtEpochMillis
+  - marketTrainingParticipation
+- total sale price is derived: unitPrice * amountPurchased
+- mixed enchanted books remain in sale history but are marked EXCLUDED from training
+- packages/bundles do not enter sale history/training and do not receive recommendations
+- recalculation should be infrequent and configurable
+
+10. Market calculator + scheduler
+---------------------------------
+Purpose:
+- calculate compact per-market-key economics values without heavy Paper coupling
+- run recommendation recalculation slowly over many ticks
+- keep recommendations responsive without stalling server ticks
+
+How it works:
+- MarketProfileCalculator is mostly pure Java
+- it reads recent SaleRecord data + active Listing data and returns an updated MarketProfile
+- it should use simple averages, simple trend slope/fitness, and clamped rule-based movement
+- it should avoid calculus and rely mostly on algebra + simple regression
+- MarketRecalculationService should:
+  - compare current time against the global daily-style interval
+  - build a queue of eligible market keys
+  - skip items recalculated too recently
+  - process only a few market keys per run/tick
+  - support manual/emergency item recalculation
+- manual recalculation should update lastRecalculatedAtEpochMillis so the next daily pass skips that item until its per-item timer allows it again
+
+11. Menu system layer
+---------------------
+Purpose:
+- render chest GUI menus cleanly without turning the plugin into one giant listener
+- keep UI state separate from business logic
+- reuse the same layouts for main navigation, category browsing, listings, claims,
+  history, and item detail flows
+
+How it works:
+- MenuView defines the current menu screen
+- MenuSession stores per-player UI state only
+- MenuSessionManager stores/retrieves sessions by player UUID
+- MarketMenuHolder identifies plugin-owned inventories safely
+- MenuRenderer builds inventories from MenuSession + menu-ready data
+- MenuDataFacade gathers menu-ready data from underlying services/stores
+- MenuItemFactory centralizes GUI item creation, lore, filler panes, and buttons
+- MenuClickRouter translates clicks into state transitions or service calls
+- MarketMenuListener is a thin Paper listener that cancels chest behavior and routes clicks
+
+Locked v1 menu flow:
+- `/market` -> Main Menu
+- `/market all` -> Listing Browser with no marketKey filter, sorted newest first
+- `/market <category>` -> Category Browser
+- `/market search <query>` -> Search Results
+- clicking a market group -> Listing Browser filtered to one marketKey
+- clicking a listing -> Item Detail / Buy / Cancel
+- `/market claim` -> Claims
+- `/market claim earnings` -> direct money payout
+
+Locked v1 menu rules:
+- menu titles should be the relevant current menu name
+- empty usable slots stay empty
+- Search is command-driven in v1
+- listing detail screen shows cancel button only for owner or .admin
+- All Listings should default to newest-first sorting
+- history screens are simple paged chest views, not graphs
+
+12. Core service + persistence pseudocode layer
+-----------------------------------------------
+Purpose:
+- freeze core behaviors before applying Paper API
+- keep business logic separate from listeners, menus, and commands
+- make file-by-file Paper implementation cleaner and less monster-like
+
+How it works:
+- persistence interfaces define how each binary file is read/written/cleaned
+- service interfaces define listing, purchase, claim, history, search, and audit flows
+- commands stay thin and delegate into services/controllers
+- menu layer stays a view/router around service behavior
+
+Implementation order after this pseudocode pass:
+1. binary stores
+2. core business services
+3. menu renderer/router/listener
+4. command layer
+5. final plugin wiring

@@ -1,0 +1,22 @@
+DivineMarketplace Permissions
+
+Player:
+- divinemarketplace.use
+- divinemarketplace.sell
+- divinemarketplace.search
+- divinemarketplace.claim
+
+Admin:
+- divinemarketplace.admin
+- divinemarketplace.reload
+- divinemarketplace.recalc
+- divinemarketplace.marketprofile
+- divinemarketplace.flagged.view
+- divinemarketplace.item.info
+- divinemarketplace.item.sort
+- divinemarketplace.item.defineheld
+- divinemarketplace.enchant.define
+- divinemarketplace.listing.cancel.other
+- divinemarketplace.claim.confiscate
+- divinemarketplace.history.view
+- divinemarketplace.history.export

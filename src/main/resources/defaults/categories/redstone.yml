@@ -1,0 +1,7 @@
+categoryId: redstone
+items:
+  - REDSTONE
+  - REPEATER
+  - COMPARATOR
+  - PISTON
+  - OBSERVER

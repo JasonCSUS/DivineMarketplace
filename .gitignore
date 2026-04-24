@@ -1,0 +1,15 @@
+# Gradle / build output
+.gradle/
+build/
+bin/
+
+# Editor settings
+.vscode/
+
+# Stale files/folders scheduled for removal
+DELETE_STALE_FILES.txt
+src/main/java/divinejason/divinemarketplace/auction/model/ClaimRecord.java
+src/main/java/divinejason/divinemarketplace/auction/ui/
+src/main/java/divinejason/divinemarketplace/listener/AuctionInventoryListener.java
+src/main/java/divinejason/divinemarketplace/command/AuctionCommand.java
+src/main/java/divinejason/divinemarketplace/command/AuctionAdminCommand.java

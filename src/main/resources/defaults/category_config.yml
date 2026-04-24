@@ -1,0 +1,52 @@
+categories:
+  building_blocks:
+    displayName: "Building Blocks"
+    icon: "STONE"
+  cut_blocks:
+    displayName: "Cut Blocks"
+    icon: "STONE_BRICK_STAIRS"
+  wood:
+    displayName: "Wood"
+    icon: "OAK_LOG"
+  materials:
+    displayName: "Materials"
+    icon: "IRON_INGOT"
+  redstone:
+    displayName: "Redstone"
+    icon: "REDSTONE"
+  tools:
+    displayName: "Tools"
+    icon: "DIAMOND_PICKAXE"
+  weapons:
+    displayName: "Weapons"
+    icon: "DIAMOND_SWORD"
+  armor:
+    displayName: "Armor"
+    icon: "DIAMOND_CHESTPLATE"
+  farming:
+    displayName: "Farming"
+    icon: "WHEAT"
+  vehicles:
+    displayName: "Vehicles"
+    icon: "MINECART"
+  enchanted_books:
+    displayName: "Enchanted Books"
+    icon: "ENCHANTED_BOOK"
+  potions:
+    displayName: "Potions"
+    icon: "POTION"
+  accessories:
+    displayName: "Accessories"
+    icon: "STICK:714.0"
+  keys:
+    displayName: "Keys"
+    icon: "TRIPWIRE_HOOK:411.0"
+  packages:
+    displayName: "Packages"
+    icon: "SHULKER_BOX"
+  misc:
+    displayName: "Misc"
+    icon: "CHEST"
+  unsorted:
+    displayName: "Unsorted"
+    icon: "BARRIER"

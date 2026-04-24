@@ -1,0 +1,6 @@
+categoryId: potions
+items:
+  - POTION
+  - SPLASH_POTION
+  - LINGERING_POTION
+  - TIPPED_ARROW

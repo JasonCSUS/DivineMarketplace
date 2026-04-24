@@ -1,0 +1,27 @@
+name: DivineMarketplace
+version: 1.0.0
+main: divinejason.divinemarketplace.DivineMarketplace
+api-version: '26.1.2'
+author: Jason
+description: Auction house and market analytics plugin
+depend:
+  - Vault
+softdepend:
+  - ItemsAdder
+commands:
+  market:
+    description: Open and manage the DivineMarketplace UI
+    usage: /market [subcommand]
+permissions:
+  divinemarketplace.use:
+    description: Allows use of the marketplace
+    default: true
+  divinemarketplace.admin:
+    description: Full access to DivineMarketplace admin controls
+    default: op
+  divinemarketplace.reload:
+    description: Reload DivineMarketplace configs and rebuild caches
+    default: op
+  divinemarketplace.recalc:
+    description: Recalculate market profiles and recommended prices
+    default: op

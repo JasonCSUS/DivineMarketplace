@@ -1,0 +1,7 @@
+enchants:
+  excellentenchants:cure:
+    displayName: "Cure"
+    browseGroups:
+      - SWORD
+      - AXE
+    sourceHint: "ExcellentEnchants"
