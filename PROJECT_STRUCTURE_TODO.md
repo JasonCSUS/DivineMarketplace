@@ -210,3 +210,122 @@ plugins/DivineMarketplace/
 - exact Paper inventory API details for safe item removal/delivery while preserving the locked behavior
 - exact registration/bootstrap wiring in `DivineMarketplace.java`
 - old duplicate UI package under `auction/ui/**` should be removed so the new `menu/**` package is the only menu system
+
+### Config bootstrap / loader layer
+- bundled resource files under src/main/resources are shipped default templates, not live editable files
+- live editable files are copied into plugins/DivineMarketplace/ on first run
+- locked shipped exact defaults:
+  - config.yml
+  - category_config.yml
+  - custom/custom_items.yml
+  - custom/custom_enchants.yml
+  - permissions.txt
+- default category_config.yml now starts with vanilla top-level categories only
+- categories/<category>.yml files are generated as live files under the plugin folder
+- MainConfig/MainConfigLoader/ConfigService are now the startup config parse/cache chain
+- remaining TODO:
+  - generate exact populated vanilla category item files later once category taxonomy + denylist generation pass is locked
+
+### Exact bundled category defaults
+- built-in category files in `src/main/resources/defaults/categories/` are now treated as exact shipped defaults, not examples
+- `PluginFileInitializer` should copy exact bundled category defaults for built-in categories
+- blank category files should only be generated for custom categories added later
+- on first bundled-default copy, category coverage validation should warn about:
+  - invalid material names
+  - duplicate materials across built-in category files
+  - uncategorized allowed vanilla materials
+
+### Default shipped categories
+- shipped vanilla top-level defaults now include `ores`
+- `ores` should hold ore blocks, raw ore items/blocks, processed ingots/nuggets/gems, and storage blocks for the major ore families
+- matching items should be removed from broad buckets like `materials` and `redstone`
+
+### Startup wiring
+- startup should now be implemented for:
+  - live folder/file bootstrap
+  - config load
+  - config cache
+- `DivineMarketplace` should disable itself cleanly if bootstrap or config load fails
+- deeper repository/service/menu wiring remains for later milestones
+
+### Binary store implementation notes
+- binary stores are now safe to implement mostly as plain Java file handlers
+- ItemStack snapshots should use Paper byte serialization helpers, not Bukkit object streams
+- current low-risk implementation direction is read-full-file / mutate / rewrite atomically
+- known remaining hiccups:
+  - mixed/singular enchant Sale History expansion should stay above the low-level sales store
+  - recommendation history still does not have a dedicated binary store/file in the current layout
+  - if performance later becomes a problem, append-only formats can replace the simpler rewrite model
+
+### Item claims storage refinement
+- item claims should no longer be treated as one giant `item_claims.bin`
+- v1 storage helper direction is:
+  - owner-hash sharded claim files
+  - shard metadata sidecars
+  - cleanup only scans candidate shards
+  - cleanup targets enough purge to get below `max - 10% of max`
+  - candidate shards are prioritized by oldest `lastActivityAtEpochMillis`
+- important: storage helpers do not schedule cleanup on their own
+
+### ListingService main-hand-only refinement
+- normal listing flow should be main-hand only
+- listing should not scan the rest of the inventory for a similar stack
+- requested quantity should clamp down to the current main-hand amount
+- multi-stack or broader inventory listing should only happen under an explicit later command/flow
+
+### Listing structural correction
+- `Listing` should store `categoryId` directly
+- normal browse/index flows should not need to re-resolve item identity to recover a listing category
+- listing creation should return a result object with:
+  - success/failure
+  - failure reason
+  - debug message
+  - actual clamped quantity
+- lightweight admin history status/reason strings are acceptable for now
+
+### Claim-to-listing relist flow
+- players should be able to relist directly from claims
+- main reason: cancel a listing, then relist at a different price without moving the item back through inventory first
+- relist should:
+  - be owner-only in normal flow
+  - support partial relist quantity
+  - clamp requested quantity to the claim amount
+  - create a fresh listing from claimItemSnapshot
+  - decrement or delete the claim only after listing success
+  - return a structured ListingCreateResult for clean player/debug feedback
+- claim-based relist should live under ClaimService rather than the normal main-hand ListingService path
+
+### Custom item auto-definition persistence
+- auto-discovered custom items should be written through to `custom/custom_items.yml`
+- persisted auto-definitions should include:
+  - itemType
+  - requiredMaterial
+  - requiredCustomModelData
+  - marketDisplayName
+  - categoryId = unsorted
+- a registry/data-source helper should own the write-through path so later admin sort/define commands can reuse it
+- only filled bundles/shulkers should take the package/container path
+- mixed enchanted books only need stable identity + correct history/training flags for now; richer browse/history behavior can be refined later
+\n
+### ClaimService implementation direction
+- ClaimService should now be able to:
+  - redeem one safe stack-sized chunk
+  - redeem as much as safely fits in storage contents
+  - relist directly from claims without routing through inventory first
+  - claim earnings through Vault
+- relist-from-claim currently duplicates some listing creation logic because
+  the normal ListingService flow is intentionally main-hand only
+- later cleanup/refactor could move shared listing write logic into a common helper
+\n
+### Command layer finalization
+- `/market` command should use Paper's BasicCommand path for:
+  - permission-aware visibility
+  - suggestion support
+  - rich sender messaging
+- player suggestions should prefer market display names
+- admin suggestions should expose both market keys and market display names
+- low-risk live command paths now include:
+  - listing creation
+  - claim earnings
+  - text-based sale history lookup
+- menu-heavy or unfinished maintenance commands may remain explicit placeholders until their backing services are finished

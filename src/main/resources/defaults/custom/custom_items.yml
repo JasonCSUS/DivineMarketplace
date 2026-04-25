@@ -1,8 +1,1 @@
 items:
-  rocket_boots:
-    itemType: "rocket_boots"
-    requiredMaterial: STICK
-    requiredCustomModelData: 832.0
-    marketDisplayName: "Rocket Boots"
-    categoryId: accessories
-

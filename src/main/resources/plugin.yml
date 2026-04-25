@@ -16,12 +16,50 @@ permissions:
   divinemarketplace.use:
     description: Allows use of the marketplace
     default: true
+  divinemarketplace.claim:
+    description: Allows claiming owed items and earnings
+    default: true
   divinemarketplace.admin:
     description: Full access to DivineMarketplace admin controls
     default: op
-  divinemarketplace.reload:
-    description: Reload DivineMarketplace configs and rebuild caches
+    children:
+      divinemarketplace.admin.reload: true
+      divinemarketplace.admin.recalc: true
+      divinemarketplace.admin.price.set: true
+      divinemarketplace.admin.listing.cancel: true
+      divinemarketplace.admin.history.view: true
+      divinemarketplace.admin.history.export: true
+      divinemarketplace.admin.item.sort: true
+      divinemarketplace.admin.item.define: true
+      divinemarketplace.admin.enchant.define: true
+      divinemarketplace.admin.flagged.view: true
+  divinemarketplace.admin.reload:
+    description: Reload DivineMarketplace configs and cached runtime state
     default: op
-  divinemarketplace.recalc:
+  divinemarketplace.admin.recalc:
     description: Recalculate market profiles and recommended prices
+    default: op
+  divinemarketplace.admin.price.set:
+    description: Manually set recommended price for a market key
+    default: op
+  divinemarketplace.admin.listing.cancel:
+    description: Cancel another player's listing
+    default: op
+  divinemarketplace.admin.history.view:
+    description: View admin history in-game
+    default: op
+  divinemarketplace.admin.history.export:
+    description: Export admin history to readable files
+    default: op
+  divinemarketplace.admin.item.sort:
+    description: Change item category placement
+    default: op
+  divinemarketplace.admin.item.define:
+    description: Define or update held custom item metadata
+    default: op
+  divinemarketplace.admin.enchant.define:
+    description: Define or update custom enchant metadata
+    default: op
+  divinemarketplace.admin.flagged.view:
+    description: View flagged and review-needed items
     default: op

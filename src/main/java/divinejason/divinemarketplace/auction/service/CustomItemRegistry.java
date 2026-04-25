@@ -1,45 +1,23 @@
 package divinejason.divinemarketplace.auction.service;
 
 import divinejason.divinemarketplace.auction.model.CustomItemDefinition;
+import org.bukkit.Material;
 
 /**
  * Registry of configured custom item definitions.
  *
  * Responsibilities:
  * - load custom item definitions from the configured data source
- *   (yaml / csv / sql / etc.)
- * - build and cache an in-memory map: item_type -> CustomItemDefinition
- * - provide fast runtime lookup by item_type
- * - support reload
- * - support write-through updates when admin commands define or re-sort items
- *
- * Non-responsibilities:
- * - does not inspect ItemStacks directly
- * - does not extract custom ids from item metadata
- * - does not build ResolvedItemDefinition
- *
- * Current custom item definition shape:
- * - itemType
- * - requiredMaterial
- * - requiredCustomModelData
- * - marketDisplayName
- * - categoryId
+ * - build and cache in-memory lookup maps
+ * - provide fast lookup by item_type and material/custom-model-data fallback
+ * - support write-through updates when auto-discovery or admin sorting defines items
  */
 public interface CustomItemRegistry {
     CustomItemDefinition findByItemType(String itemType);
+
+    CustomItemDefinition findByMaterialAndCustomModelData(Material material, Float requiredCustomModelData);
+
+    CustomItemDefinition upsertDefinition(CustomItemDefinition definition);
+
+    void reload();
 }
-
-/*
-registry flow:
-
-startup / reload:
-- call CustomItemDataSource to load configured custom item definitions
-- build in-memory map:
-    itemType -> CustomItemDefinition
-
-runtime:
-- ItemIdentityResolver extracts itemType if available
-- registry does fast in-memory lookup
-- if no itemType is available, resolver may still auto-discover a provisional
-  definition using material + custom model data and write it through here
-*/

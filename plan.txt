@@ -261,3 +261,169 @@ Implementation order after this pseudocode pass:
 3. menu renderer/router/listener
 4. command layer
 5. final plugin wiring
+
+13. Config bootstrap + parse/cache layer
+----------------------------------------
+Purpose:
+- create exact live config files from shipped resource defaults on first run
+- separate bootstrap file generation from runtime config parsing
+- make global config values available everywhere through one cached object
+
+How it works:
+- PluginDirectoryLayout defines live plugin-folder paths
+- PluginFileInitializer creates missing folders and copies missing shipped defaults
+- category_config.yml is copied as an exact default template
+- categories/<category>.yml live files are then ensured from the copied category_config.yml
+- MainConfigLoader parses plugins/DivineMarketplace/config.yml into MainConfig
+- ConfigService caches the parsed MainConfig and exposes specific helper getters
+
+13. Exact bundled default category files
+----------------------------------------
+Purpose:
+- ship real default category mappings instead of loose examples
+- make first-run copied category files match the intended vanilla browsing taxonomy
+- use runtime validation only as a safety net for misses, duplicates, and invalid names
+
+How it works:
+- built-in category ids live in `defaults/category_config.yml`
+- exact built-in category mapping files live in `defaults/categories/<categoryId>.yml`
+- PluginFileInitializer copies exact bundled category files when a built-in category file is missing
+- custom category ids added later still get blank generated files
+- if bundled defaults are copied during bootstrap, the initializer validates the built-in category coverage against allowed Material values and warns about anything uncategorized
+
+Ores category note
+------------------
+The shipped vanilla defaults should include an `ores` category for the major
+ore families and their related progression items:
+- ore blocks
+- raw ore items / raw ore blocks
+- ingots / nuggets / gems
+- storage blocks
+
+This keeps broad categories like `materials` and `redstone` from becoming too
+overloaded with core mining economy items.
+
+13. Real startup wiring
+-----------------------
+Purpose:
+- make the plugin boot cleanly before deeper market logic is implemented
+
+How it works:
+- DivineMarketplace onEnable first runs PluginFileInitializer
+- PluginFileInitializer creates/copies the live plugin-folder files
+- MainConfigLoader then reads the live config.yml
+- ConfigService caches the parsed MainConfig
+- if bootstrap or config loading fails, the plugin disables itself cleanly
+
+14. Binary persistence implementation notes
+-------------------------------------------
+Purpose:
+- turn the binary store scaffolds into real low-risk Java file handlers
+
+Current implementation direction:
+- use plain Java DataInputStream/DataOutputStream file formats
+- use Paper ItemStack byte serialization for item snapshots
+- avoid Bukkit object streams
+- prefer simple full-read / mutate / atomic-rewrite logic first
+- optimize later only if profiling shows real need
+
+Item claims sharding note
+------------------------
+Item claims should be sharded by owner UUID hash rather than stored as one
+giant monolithic file or sharded by date.
+
+Why:
+- normal claim actions are owner-centric
+- one player action should usually touch only one shard
+- cleanup can use shard metadata to skip obviously-young shards
+
+Cleanup policy:
+- run only when the higher-level runtime chooses to call it
+- if total shard bytes exceed the configured soft max, only shards whose
+  oldest claim is old enough to be abandoned are candidates
+- sort candidate shards by oldest lastActivityAt
+- purge until total bytes are at or below (max - 10% of max), not merely
+  just under the cap
+
+Main-hand listing refinement
+---------------------------
+The default v1 listing flow should mutate only the main-hand slot.
+
+Why:
+- safer UX
+- less ambiguity
+- simpler rollback
+- avoids the plugin choosing some other similar stack in storage
+
+Requested quantity should clamp down to the current main-hand stack amount
+rather than searching elsewhere in inventory.
+
+Listing result object note
+--------------------------
+Listing creation should return a structured result object rather than forcing
+commands/menus to inspect exception text.
+
+Why:
+- player feedback
+- debugging
+- cleaner command/menu integration
+
+Also, Listing should store categoryId directly so category browsing and index
+refreshes do not have to re-resolve item identity later.
+
+Claim relist note
+-----------------
+Item claims should support a direct relist flow.
+
+Why:
+- a player may cancel a listing and want to repost it at a different price
+- routing the item back through inventory first is extra friction and extra risk
+
+Intended flow:
+- ClaimService loads the item claim
+- requested relist quantity clamps to claim amount
+- listing is created from the stored claim snapshot
+- only after success is the claim decremented or removed
+- the relist result is returned in structured form for player messaging and debugging
+
+Custom auto-definition write-through note
+----------------------------------------
+Unknown custom items should not remain runtime-only provisional identities.
+
+Instead:
+- ItemIdentityResolver should hand the discovery off to a registry/data-source helper
+- the helper should upsert a real definition into custom_items.yml
+- the new entry should default to categoryId = unsorted
+- later sort/define commands should reuse the same upsert path for proactive edits
+
+Package rule:
+- only filled bundles/shulkers should go down the package path
+- empty ones should resolve like normal items
+\n
+17. ClaimService implementation direction
+-----------------------------------------
+Purpose:
+- turn item claims and money claims into real user actions
+
+Current best concrete shape:
+- DefaultClaimService should use storage-contents insertion logic for item delivery
+- relist-from-claim should use the stored claim snapshot and only decrement the
+  claim after listing success
+- claim earnings should use an injected Vault Economy implementation rather than
+  plugin lookup inside the service
+- because normal listing is main-hand only, relist-from-claim may temporarily
+  duplicate some listing-creation logic until a shared helper exists
+\n
+20. Command layer direction
+--------------------------
+Purpose:
+- provide good UX without turning the command layer into a second business-logic layer
+
+Current direction:
+- use Paper BasicCommand for `/market`
+- keep one player-facing command entry point and delegate admin subcommands internally
+- use rich text sender messaging for readable success/failure output
+- suggest category ids, market display names, and market keys based on audience:
+  - players: category ids + market display names
+  - admins: category ids + market display names + market keys for maintenance commands
+- unfinished menu-heavy/admin-maintenance commands can be recognized with friendly placeholder responses until their services are complete

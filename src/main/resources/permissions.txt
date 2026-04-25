@@ -1,0 +1,66 @@
+DivineMarketplace permissions reference
+=======================================
+
+Built-in plugin permissions
+---------------------------
+divinemarketplace.use
+  Basic player access to the marketplace.
+
+divinemarketplace.claim
+  Allows opening claims and claiming pending earnings/items.
+
+divinemarketplace.admin
+  Parent permission for full marketplace administration.
+
+divinemarketplace.admin.reload
+  Reload configs and rebuild cached runtime state.
+
+divinemarketplace.admin.recalc
+  Recalculate one market key or all market profiles.
+
+divinemarketplace.admin.price.set
+  Manually set the current recommended price for a market key.
+
+divinemarketplace.admin.listing.cancel
+  Cancel another player's listing.
+
+divinemarketplace.admin.history.view
+  View admin history in-game.
+
+divinemarketplace.admin.history.export
+  Export admin history into readable text files.
+
+divinemarketplace.admin.item.sort
+  Change category placement for an item or market group.
+
+divinemarketplace.admin.item.define
+  Define/update held custom item metadata.
+
+divinemarketplace.admin.enchant.define
+  Define/update custom enchant metadata.
+
+divinemarketplace.admin.flagged.view
+  View flagged / review-needed items.
+
+Config-defined premium tier permissions
+---------------------------------------
+Premium listing tier permissions are NOT fixed in code.
+
+Server owners define those permission nodes in config.yml under:
+listingPolicies.tiers
+
+Example:
+- divinemarketplace.tier.1
+- divinemarketplace.tier.2
+- divinemarketplace.vip
+- yourserver.market.legend
+
+The plugin will use whatever permission nodes are configured there to decide:
+- max active listings
+- listing duration
+
+Reminder
+--------
+Whenever a new hard-coded built-in permission is added to the plugin, update BOTH:
+- plugin.yml
+- permissions.txt

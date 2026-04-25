@@ -1,34 +1,11 @@
 # DivineMarketplace main behavior config
-# This file is intended to be human-editable.
+# This file is copied into plugins/DivineMarketplace/config.yml on first run.
 #
 # Money rule:
 # - all internal money values are stored as integer hundredths
 # - convert to decimal only when displaying values or calling Vault
 
 storage:
-  definitions:
-    categories: YAML
-    customItems: YAML
-    customEnchants: YAML
-  runtime:
-    listings: BINARY
-    itemClaims: BINARY
-    moneyClaims: BINARY
-    sales: BINARY
-    marketProfiles: BINARY
-    packageCache: BINARY
-    unknownCustomItems: BINARY
-    unknownCustomEnchants: BINARY
-    adminSales: BINARY
-    adminListings: BINARY
-    adminClaims: BINARY
-  sql:
-    enabled: false
-    host: localhost
-    port: 3306
-    database: divinemarketplace
-    username: root
-    password: change_me
   limits:
     salesHistoryMaxMb: 50
     adminSalesHistoryMaxMb: 25
@@ -41,7 +18,7 @@ storage:
 customItems:
   autoDiscoverUnknownItems: true
   autoWriteDefinitionsImmediately: true
-  defaultCategory: unsorted
+  defaultCategory: "unsorted"
   useClonedItemForPreviewTemplate: true
   requireAdminReviewForAllNewItems: true
   highPriorityOnlyForUnsafeResolution: true
@@ -66,25 +43,31 @@ claims:
   shiftClickClaimsAsMuchAsSafelyFits: true
 
 packages:
-  previewMode: EXACT # EXACT or SIMPLIFIED
+  previewMode: "EXACT" # EXACT or SIMPLIFIED
   keepExactPayloadInFileStorage: true
   keepExactPayloadCachedInMemory: false
 
 market:
-  recalcIntervalHours: 6
-  maxPriceMovePercentPerRecalc: 50.0
-  minPriceMovePercentPerRecalc: 1.0
-  sameThresholdPercent: 5.0
-  smallThresholdPercent: 10.0
-  mediumThresholdPercent: 15.0
-  largeThresholdPercent: 100.0
-  lowerCrashThresholdPercent: 50.0
-  smallMoveFractionTowardTarget: 0.10
-  mediumMoveFractionTowardTarget: 0.25
-  largeMoveFractionTowardTarget: 0.33
-  majorMoveFractionTowardTarget: 0.50
-  minSamplesForTrend: 5
-  trendWindowHours: 24
+  recalcIntervalHours: 24
+  perItemMinimumRecalcHours: 24
+  recalcItemsPerRun: 5
+  saleLookbackDays: 30
+
+  thresholds:
+    samePercent: 5.0
+    smallAdjustmentPercent: 10.0
+    mediumAdjustmentPercent: 15.0
+    majorOverpricedPercent: 100.0
+    majorUnderpricedPercent: 50.0
+
+  adjustment:
+    minimumPercent: 1.0
+    maximumPercent: 50.0
+
+  trend:
+    fitnessThreshold: 0.60
+    minimumSaleSamples: 3
+    minimumListingSamples: 3
 
 search:
   partialMatching: true
@@ -99,8 +82,7 @@ admin:
   regeneratePermissionsFileOnReload: false
 
 ui:
-  categoryGridRows: 4
-  categoryGridColumns: 5
+  defaultSortMode: "NEWEST_FIRST"
   showEmptyTopLevelCategories: true
   showListingCountsInCategoryLore: true
   interceptAllInventoryClicks: true

@@ -1,45 +1,174 @@
 package divinejason.divinemarketplace.auction.persistence;
 
+import divinejason.divinemarketplace.auction.model.MarketTrainingParticipation;
 import divinejason.divinemarketplace.auction.model.SaleRecord;
+import divinejason.divinemarketplace.config.ConfigService;
+import divinejason.divinemarketplace.setup.PluginDirectoryLayout;
+import org.bukkit.plugin.java.JavaPlugin;
 
+import java.io.DataInputStream;
+import java.io.DataOutputStream;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 
 /**
- * Primary storage for player-facing exact market sale history.
+ * Player-facing exact market sale history.
  *
- * File target:
- * - data/sales.bin
- *
- * Locked rules:
- * - stores exact recent sale history for market history and training/profile rebuilds
- * - may be FIFO-purged by size
- * - remains separate from admin audit history
- *
- * Known implementation TODO:
- * - enchant-book Sale History matching is asymmetric and should be implemented carefully:
- *   - singular enchant history includes singular sales and mixed-book sales containing that enchant
- *   - mixed-book history includes exact mixed sales plus singular component sales
- *   - mixed-book Price History stays disabled
+ * Potential hiccup intentionally left for higher-level history logic:
+ * - enchant-book mixed/singular match expansion is not done in this low-level store
+ * - this store only indexes exact SaleRecord.marketKey values
  */
-public interface BinarySalesStore {
+public final class BinarySalesStore {
+    private static final String MAGIC = "DMSALES";
+    private static final int VERSION = 1;
 
-    /**
-     * Append one completed market-visible sale event.
-     */
-    void append(SaleRecord saleRecord);
+    private final Path filePath;
+    private final Object lock = new Object();
 
-    /**
-     * Load recent sales for one market key within a time window for profile rebuilds.
-     */
-    List<SaleRecord> getRecentSalesForMarketKey(String marketKey, long lookbackMillis);
+    public BinarySalesStore(JavaPlugin plugin) {
+        this(plugin.getDataFolder().toPath().resolve(PluginDirectoryLayout.DATA_SALES));
+    }
 
-    /**
-     * Load paged player-facing sale history for one market key.
-     */
-    List<SaleRecord> getSaleHistoryForMarketKey(String marketKey, int page, int pageSize);
+    public BinarySalesStore(Path filePath) {
+        this.filePath = filePath;
+        try {
+            BinaryStoreSupport.ensureFileExists(filePath);
+        } catch (IOException exception) {
+            throw new IllegalStateException("Failed to initialize sales file: " + filePath, exception);
+        }
+    }
 
-    /**
-     * Purge oldest exact sale records first if the file exceeds its configured size limit.
-     */
-    void purgeOldestIfOverMaxSize();
+    public void append(SaleRecord saleRecord) {
+        synchronized (lock) {
+            List<SaleRecord> sales = loadAll();
+            sales.add(saleRecord);
+            saveAll(sales);
+        }
+    }
+
+    public List<SaleRecord> getRecentSalesForMarketKey(String marketKey, long lookbackMillis) {
+        synchronized (lock) {
+            long cutoff = System.currentTimeMillis() - lookbackMillis;
+            return loadAll().stream()
+                    .filter(record -> record.marketKey().equals(marketKey))
+                    .filter(record -> record.soldAtEpochMillis() >= cutoff)
+                    .sorted(Comparator.comparingLong(SaleRecord::soldAtEpochMillis))
+                    .toList();
+        }
+    }
+
+    public List<SaleRecord> getSaleHistoryForMarketKey(String marketKey, int page, int pageSize) {
+        synchronized (lock) {
+            List<SaleRecord> filtered = loadAll().stream()
+                    .filter(record -> record.marketKey().equals(marketKey))
+                    .sorted(Comparator.comparingLong(SaleRecord::soldAtEpochMillis).reversed())
+                    .toList();
+            return BinaryStoreSupport.page(filtered, page, pageSize);
+        }
+    }
+
+    public void purgeOldestIfOverMaxSize() {
+        synchronized (lock) {
+            long maxBytes = ConfigService.get().salesHistoryMaxMb() * 1024L * 1024L;
+            if (maxBytes <= 0L) {
+                return;
+            }
+
+            try {
+                if (!Files.exists(filePath) || Files.size(filePath) <= maxBytes) {
+                    return;
+                }
+            } catch (IOException exception) {
+                throw new IllegalStateException("Failed to check sales file size.", exception);
+            }
+
+            List<SaleRecord> sales = loadAll();
+            sales.sort(Comparator.comparingLong(SaleRecord::soldAtEpochMillis));
+
+            while (!sales.isEmpty()) {
+                sales.removeFirst();
+                saveAll(sales);
+
+                try {
+                    if (Files.size(filePath) <= maxBytes) {
+                        return;
+                    }
+                } catch (IOException exception) {
+                    throw new IllegalStateException("Failed to check sales file size after purge.", exception);
+                }
+            }
+        }
+    }
+
+    private List<SaleRecord> loadAll() {
+        try {
+            if (BinaryStoreSupport.isEmptyFile(filePath)) {
+                return new ArrayList<>();
+            }
+
+            try (DataInputStream input = BinaryStoreSupport.newInput(filePath)) {
+                BinaryStoreSupport.requireHeader(input, MAGIC, VERSION);
+
+                int count = input.readInt();
+                List<SaleRecord> sales = new ArrayList<>(count);
+
+                for (int i = 0; i < count; i++) {
+                    String marketKey = BinaryStoreSupport.readString(input);
+                    String marketDisplayName = BinaryStoreSupport.readString(input);
+                    var snapshot = BinaryStoreSupport.readItemStack(input);
+                    int amountPurchased = input.readInt();
+                    long unitPrice = input.readLong();
+                    long soldAt = input.readLong();
+                    MarketTrainingParticipation training = MarketTrainingParticipation.valueOf(BinaryStoreSupport.readString(input));
+
+                    if (marketKey != null && marketDisplayName != null && snapshot != null && training != null) {
+                        sales.add(new SaleRecord(
+                                marketKey,
+                                marketDisplayName,
+                                snapshot,
+                                amountPurchased,
+                                unitPrice,
+                                soldAt,
+                                training
+                        ));
+                    }
+                }
+
+                return sales;
+            }
+        } catch (IOException exception) {
+            throw new IllegalStateException("Failed to read sales from " + filePath, exception);
+        }
+    }
+
+    private void saveAll(List<SaleRecord> sales) {
+        try {
+            BinaryStoreSupport.writeToTempFile(filePath, output -> writeSales(output, sales));
+        } catch (IOException exception) {
+            throw new IllegalStateException("Failed to write sales to " + filePath, exception);
+        }
+    }
+
+    private void writeSales(DataOutputStream output, List<SaleRecord> sales) {
+        try {
+            BinaryStoreSupport.writeHeader(output, MAGIC, VERSION);
+            output.writeInt(sales.size());
+
+            for (SaleRecord record : sales) {
+                BinaryStoreSupport.writeString(output, record.marketKey());
+                BinaryStoreSupport.writeString(output, record.marketDisplayName());
+                BinaryStoreSupport.writeItemStack(output, record.soldItemSnapshot());
+                output.writeInt(record.amountPurchased());
+                output.writeLong(record.unitPrice());
+                output.writeLong(record.soldAtEpochMillis());
+                BinaryStoreSupport.writeString(output, record.marketTrainingParticipation().name());
+            }
+        } catch (IOException exception) {
+            throw new IllegalStateException("Failed while encoding sales.", exception);
+        }
+    }
 }

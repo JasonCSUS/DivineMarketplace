@@ -1,52 +1,29 @@
 package divinejason.divinemarketplace.setup;
 
+import org.bukkit.Material;
+import org.bukkit.configuration.ConfigurationSection;
+import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.plugin.java.JavaPlugin;
+
+import java.io.IOException;
+import java.io.InputStream;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Set;
+import java.util.logging.Logger;
 
 /**
  * Creates the plugin folder structure and any missing default files on startup.
  *
- * This class is the single owner of default file generation / bootstrap behavior.
- * Other config or registry classes should assume files already exist and only read them.
- *
- * Default editable files to create if missing:
- * - config.yml
- * - category_config.yml
- * - categories/<category>.yml
- * - custom/custom_items.yml
- * - custom/custom_enchants.yml
- * - permissions.txt
- *
- * Runtime binary state files to create if missing:
- * - data/listings.bin
- * - data/claims.bin
- * - data/sales.bin
- * - data/market_profiles.bin
- * - data/package_cache.bin
- * - data/unknown_custom_items.bin
- * - data/unknown_custom_enchants.bin
- * - data/admin_history.bin
- *
- * Intended generated file ownership:
- * - config.yml: global plugin behavior/settings only
- * - category_config.yml: top-level categories defined in config order
- * - categories/<category>.yml: vanilla/default item mappings for that category only
- * - custom/custom_items.yml: custom item definitions
- * - custom/custom_enchants.yml: custom enchant definitions / browse metadata
- * - permissions.txt: human-readable permission reference for LuckPerms/admins
- *
- * Current locked config truth:
- * - category icons support only:
- *   - "MATERIAL"
- *   - "MATERIAL:FLOAT_MODEL_DATA"
- * - do not use plugin-specific item identifiers in category icon config
- * - blank generated category files should use:
- *   categoryId: <id>
- *   items:
- *
- * Non-responsibilities:
- * - does not parse config into runtime objects
- * - does not build registries/services
- * - does not overwrite existing runtime state on normal startup
+ * Important policy:
+ * - bundled files in src/main/resources are the exact shipped defaults
+ * - built-in category mapping files are copied exactly from bundled defaults
+ * - blank category files are only generated for custom categories added later
+ * - validation of built-in category coverage runs only when bundled defaults are
+ *   being copied during bootstrap
  */
 public final class PluginFileInitializer {
 
@@ -56,40 +33,245 @@ public final class PluginFileInitializer {
         this.plugin = plugin;
     }
 
-    /**
-     * TODO bootstrap flow:
-     *
-     * First boot:
-     * 1. Ensure root plugin data folder exists.
-     * 2. Ensure subfolders exist: categories/, custom/, logs/, data/.
-     * 3. Generate config.yml from hard-coded/default resource if missing.
-     * 4. Generate category_config.yml from hard-coded/default resource if missing.
-     * 5. Read category_config.yml and collect configured category ids in config order.
-     * 6. For each configured category id:
-     *    - if categories/<categoryId>.yml exists, leave it alone
-     *    - if missing and categoryId is a built-in default category, generate built-in default mapping file
-     *    - if missing and categoryId is not a built-in default category, generate a blank category file
-     * 7. Generate custom/custom_items.yml if missing.
-     * 8. Generate custom/custom_enchants.yml if missing.
-     * 9. Generate permissions.txt if missing.
-     * 10. Create missing binary runtime state files if missing.
-     * 11. Never wipe or overwrite live binary state on ordinary startup.
-     *
-     * Future boots:
-     * 1. Ensure config.yml and category_config.yml still exist; regenerate defaults only if missing.
-     * 2. Read category_config.yml.
-     * 3. Ensure a categories/<categoryId>.yml file exists for every configured category.
-     * 4. Missing built-in categories get built-in default mapping files.
-     * 5. Missing non-built-in categories get blank mapping files.
-     * 6. Existing files must never be overwritten automatically.
-     *
-     * TODO command/bootstrap interaction:
-     * - reload should re-read editable YAML/config files and rebuild caches
-     * - in-game admin define/sort commands should be able to write through to the
-     *   backing YAML/CSV/DB immediately without needing a full restart
-     */
     public void initialize() {
-        // TODO implement folder/file bootstrap here
-        plugin.getLogger().info("PluginFileInitializer placeholder: initialize default files/folders here.");
+        Logger logger = plugin.getLogger();
+        Path dataFolder = plugin.getDataFolder().toPath();
+
+        try {
+            for (Path requiredDirectory : PluginDirectoryLayout.requiredDirectories(dataFolder)) {
+                ensureDirectory(requiredDirectory);
+            }
+
+            boolean copiedCategoryConfig = ensureBundledFile("defaults/category_config.yml", PluginDirectoryLayout.resolveCategoryConfigFile(dataFolder), logger);
+
+            ensureBundledFile("config.yml", PluginDirectoryLayout.resolveConfigFile(dataFolder), logger);
+            ensureBundledFile("defaults/custom/custom_items.yml", PluginDirectoryLayout.resolveCustomItemsFile(dataFolder), logger);
+            ensureBundledFile("defaults/custom/custom_enchants.yml", PluginDirectoryLayout.resolveCustomEnchantsFile(dataFolder), logger);
+            ensureBundledFile("permissions.txt", PluginDirectoryLayout.resolvePermissionsFile(dataFolder), logger);
+
+            for (Path logFile : PluginDirectoryLayout.requiredTextLogFiles(dataFolder)) {
+                ensureTextFile(logFile, "");
+            }
+
+            for (Path binaryFile : PluginDirectoryLayout.requiredBinaryStateFiles(dataFolder)) {
+                ensureBinaryStateFile(binaryFile);
+            }
+
+            boolean copiedAnyBundledCategoryDefaults = ensureCategoryFiles(dataFolder, logger);
+
+            if (copiedCategoryConfig || copiedAnyBundledCategoryDefaults) {
+                validateBundledDefaultCategoryCoverage(dataFolder, logger);
+            }
+        } catch (IOException exception) {
+            throw new IllegalStateException("Failed to initialize DivineMarketplace files.", exception);
+        }
+    }
+
+    /**
+     * Ensures every configured category has a live category file.
+     *
+     * Built-in categories:
+     * - copy the bundled exact default file from resources/defaults/categories/
+     *
+     * Custom categories:
+     * - generate a blank file with categoryId and empty items list
+     */
+    private boolean ensureCategoryFiles(Path dataFolder, Logger logger) throws IOException {
+        boolean copiedAnyBundledCategoryDefaults = false;
+
+        YamlConfiguration categoryConfig = YamlConfiguration.loadConfiguration(
+                PluginDirectoryLayout.resolveCategoryConfigFile(dataFolder).toFile()
+        );
+
+        ConfigurationSection categoriesSection = categoryConfig.getConfigurationSection("categories");
+        if (categoriesSection == null) {
+            logger.warning("category_config.yml has no categories section; no category mapping files were generated.");
+            return false;
+        }
+
+        Set<String> categoryIds = new LinkedHashSet<>(categoriesSection.getKeys(false));
+        for (String categoryId : categoryIds) {
+            Path categoryFile = PluginDirectoryLayout.resolveCategoryFile(dataFolder, categoryId);
+            if (Files.exists(categoryFile)) {
+                continue;
+            }
+
+            String bundledResource = PluginDirectoryLayout.bundledCategoryResource(categoryId);
+            if (hasBundledResource(bundledResource)) {
+                if (ensureBundledFile(bundledResource, categoryFile, logger)) {
+                    copiedAnyBundledCategoryDefaults = true;
+                }
+            } else {
+                createBlankCategoryFileIfMissing(categoryFile, categoryId);
+            }
+        }
+
+        return copiedAnyBundledCategoryDefaults;
+    }
+
+    private void validateBundledDefaultCategoryCoverage(Path dataFolder, Logger logger) {
+        try {
+            YamlConfiguration categoryConfig = YamlConfiguration.loadConfiguration(
+                    PluginDirectoryLayout.resolveCategoryConfigFile(dataFolder).toFile()
+            );
+
+            ConfigurationSection categoriesSection = categoryConfig.getConfigurationSection("categories");
+            if (categoriesSection == null) {
+                return;
+            }
+
+            Set<Material> assigned = new LinkedHashSet<>();
+            Set<Material> duplicates = new LinkedHashSet<>();
+            List<String> invalidEntries = new ArrayList<>();
+
+            for (String categoryId : categoriesSection.getKeys(false)) {
+                String bundledResource = PluginDirectoryLayout.bundledCategoryResource(categoryId);
+                if (!hasBundledResource(bundledResource)) {
+                    continue;
+                }
+
+                Path liveCategoryFile = PluginDirectoryLayout.resolveCategoryFile(dataFolder, categoryId);
+                YamlConfiguration categoryYaml = YamlConfiguration.loadConfiguration(liveCategoryFile.toFile());
+
+                for (String rawMaterialName : categoryYaml.getStringList("items")) {
+                    Material material = Material.matchMaterial(rawMaterialName);
+                    if (material == null) {
+                        invalidEntries.add(categoryId + ":" + rawMaterialName);
+                        continue;
+                    }
+
+                    if (!assigned.add(material)) {
+                        duplicates.add(material);
+                    }
+                }
+            }
+
+            List<String> uncategorized = new ArrayList<>();
+            for (Material material : Material.values()) {
+                if (shouldSkipVanillaCoverageValidation(material)) {
+                    continue;
+                }
+                if (!assigned.contains(material)) {
+                    uncategorized.add(material.name());
+                }
+            }
+
+            if (!invalidEntries.isEmpty()) {
+                logger.warning(() -> "Built-in category defaults contain invalid material names: " + invalidEntries);
+            }
+
+            if (!duplicates.isEmpty()) {
+                logger.warning(() -> "Built-in category defaults contain duplicate materials: " + duplicates);
+            }
+
+            if (!uncategorized.isEmpty()) {
+                logger.warning(() -> "Built-in category defaults missed " + uncategorized.size() + " allowed vanilla materials. They will fall into unsorted until categorized.");
+                logger.warning(() -> "Uncategorized materials: " + uncategorized);
+            }
+        } catch (Exception exception) {
+            logger.warning(() -> "Failed to validate bundled default category coverage: " + exception.getMessage());
+        }
+    }
+
+    private boolean shouldSkipVanillaCoverageValidation(Material material) {
+        if (material.isLegacy() || !material.isItem()) {
+            return true;
+        }
+
+        String name = material.name();
+
+        if (name.endsWith("_SPAWN_EGG")) {
+            return true;
+        }
+
+        return switch (name) {
+            case "AIR",
+                    "CAVE_AIR",
+                    "VOID_AIR",
+                    "BARRIER",
+                    "LIGHT",
+                    "DEBUG_STICK",
+                    "COMMAND_BLOCK",
+                    "CHAIN_COMMAND_BLOCK",
+                    "REPEATING_COMMAND_BLOCK",
+                    "COMMAND_BLOCK_MINECART",
+                    "STRUCTURE_BLOCK",
+                    "STRUCTURE_VOID",
+                    "JIGSAW",
+                    "KNOWLEDGE_BOOK",
+                    "BEDROCK",
+                    "END_PORTAL_FRAME",
+                    "PETRIFIED_OAK_SLAB",
+                    "PLAYER_HEAD",
+                    "ZOMBIE_HEAD",
+                    "CREEPER_HEAD",
+                    "SKELETON_SKULL",
+                    "WITHER_SKELETON_SKULL",
+                    "DRAGON_HEAD",
+                    "PIGLIN_HEAD",
+                    "TRIAL_SPAWNER",
+                    "SPAWNER",
+                    "VAULT",
+                    "REINFORCED_DEEPSLATE" -> true;
+            default -> false;
+        };
+    }
+
+    private void createBlankCategoryFileIfMissing(Path categoryFile, String categoryId) throws IOException {
+        if (Files.exists(categoryFile)) {
+            return;
+        }
+        String content = "categoryId: " + categoryId + System.lineSeparator() + "items:" + System.lineSeparator();
+        ensureTextFile(categoryFile, content);
+    }
+
+    private boolean ensureBundledFile(String resourcePath, Path destination, Logger logger) throws IOException {
+        if (Files.exists(destination)) {
+            return false;
+        }
+
+        try (InputStream inputStream = plugin.getResource(resourcePath)) {
+            if (inputStream == null) {
+                throw new IOException("Missing bundled resource: " + resourcePath);
+            }
+
+            ensureDirectory(destination.getParent());
+            Files.copy(inputStream, destination);
+            logger.info(() -> "Created default file: " + plugin.getDataFolder().toPath().relativize(destination));
+            return true;
+        }
+    }
+
+    private boolean hasBundledResource(String resourcePath) {
+        try (InputStream inputStream = plugin.getResource(resourcePath)) {
+            return inputStream != null;
+        } catch (IOException ignored) {
+            return false;
+        }
+    }
+
+    private void ensureBinaryStateFile(Path path) throws IOException {
+        if (Files.exists(path)) {
+            return;
+        }
+
+        ensureDirectory(path.getParent());
+        Files.createFile(path);
+    }
+
+    private void ensureTextFile(Path path, String contents) throws IOException {
+        if (Files.exists(path)) {
+            return;
+        }
+
+        ensureDirectory(path.getParent());
+        Files.writeString(path, contents);
+    }
+
+    private void ensureDirectory(Path path) throws IOException {
+        if (path == null) {
+            return;
+        }
+        Files.createDirectories(path);
     }
 }
