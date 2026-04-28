@@ -12,7 +12,10 @@ import java.util.UUID;
  * - ListingService
  * - PurchaseService
  * - ClaimService
- * - PriceRecommendationService
+ *
+ * Note:
+ * - price recommendation access can remain separate and does not need to be part
+ *   of this façade
  */
 public interface AuctionService {
 

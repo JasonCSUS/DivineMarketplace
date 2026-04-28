@@ -1,7 +1,7 @@
 name: DivineMarketplace
 version: 1.0.0
 main: divinejason.divinemarketplace.DivineMarketplace
-api-version: '26.1.2'
+api-version: "1.21"
 author: Jason
 description: Auction house and market analytics plugin
 depend:
@@ -33,6 +33,9 @@ permissions:
       divinemarketplace.admin.item.define: true
       divinemarketplace.admin.enchant.define: true
       divinemarketplace.admin.flagged.view: true
+      divinemarketplace.admin.collisions.view: true
+      divinemarketplace.admin.inspect: true
+      divinemarketplace.admin.custom.override: true
   divinemarketplace.admin.reload:
     description: Reload DivineMarketplace configs and cached runtime state
     default: op
@@ -62,4 +65,13 @@ permissions:
     default: op
   divinemarketplace.admin.flagged.view:
     description: View flagged and review-needed items
+    default: op
+  divinemarketplace.admin.collisions.view:
+    description: View custom item collision log entries
+    default: op
+  divinemarketplace.admin.inspect:
+    description: Inspect held item metadata and custom-item rule matches
+    default: op
+  divinemarketplace.admin.custom.override:
+    description: Mark held false-positive custom items as vanilla or remove overrides
     default: op

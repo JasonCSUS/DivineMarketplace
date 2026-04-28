@@ -2,21 +2,20 @@ DivineMarketplace Permissions
 
 Player:
 - divinemarketplace.use
-- divinemarketplace.sell
-- divinemarketplace.search
 - divinemarketplace.claim
 
 Admin:
 - divinemarketplace.admin
-- divinemarketplace.reload
-- divinemarketplace.recalc
-- divinemarketplace.marketprofile
-- divinemarketplace.flagged.view
-- divinemarketplace.item.info
-- divinemarketplace.item.sort
-- divinemarketplace.item.defineheld
-- divinemarketplace.enchant.define
-- divinemarketplace.listing.cancel.other
-- divinemarketplace.claim.confiscate
-- divinemarketplace.history.view
-- divinemarketplace.history.export
+- divinemarketplace.admin.reload
+- divinemarketplace.admin.recalc
+- divinemarketplace.admin.price.set
+- divinemarketplace.admin.listing.cancel
+- divinemarketplace.admin.history.view
+- divinemarketplace.admin.history.export
+- divinemarketplace.admin.item.sort
+- divinemarketplace.admin.item.define
+- divinemarketplace.admin.enchant.define
+- divinemarketplace.admin.flagged.view
+- divinemarketplace.admin.collisions.view
+- divinemarketplace.admin.inspect
+- divinemarketplace.admin.custom.override

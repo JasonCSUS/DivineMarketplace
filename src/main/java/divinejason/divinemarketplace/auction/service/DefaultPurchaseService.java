@@ -9,9 +9,9 @@ import divinejason.divinemarketplace.auction.model.PurchaseFailureReason;
 import divinejason.divinemarketplace.auction.model.PurchaseResult;
 import divinejason.divinemarketplace.auction.model.ResolvedItemDefinition;
 import divinejason.divinemarketplace.auction.model.SaleRecord;
-import divinejason.divinemarketplace.auction.persistence.BinaryItemClaimStore;
-import divinejason.divinemarketplace.auction.persistence.BinaryListingStore;
-import divinejason.divinemarketplace.auction.persistence.BinaryMoneyClaimStore;
+import divinejason.divinemarketplace.auction.persistence.sqlite.SQLiteItemClaimStore;
+import divinejason.divinemarketplace.auction.persistence.sqlite.SQLiteListingStore;
+import divinejason.divinemarketplace.auction.persistence.sqlite.SQLiteMoneyClaimStore;
 import net.milkbowl.vault.economy.Economy;
 import net.milkbowl.vault.economy.EconomyResponse;
 import org.bukkit.entity.Player;
@@ -24,9 +24,9 @@ import java.util.UUID;
  * Concrete listing purchase flow.
  */
 public final class DefaultPurchaseService implements PurchaseService {
-    private final BinaryListingStore listingStore;
-    private final BinaryItemClaimStore itemClaimStore;
-    private final BinaryMoneyClaimStore moneyClaimStore;
+    private final SQLiteListingStore listingStore;
+    private final SQLiteItemClaimStore itemClaimStore;
+    private final SQLiteMoneyClaimStore moneyClaimStore;
     private final ItemIdentityResolver itemIdentityResolver;
     private final AdminHistoryService adminHistoryService;
     private final CategoryService categoryService;
@@ -35,9 +35,9 @@ public final class DefaultPurchaseService implements PurchaseService {
     private final Economy economy;
 
     public DefaultPurchaseService(
-            BinaryListingStore listingStore,
-            BinaryItemClaimStore itemClaimStore,
-            BinaryMoneyClaimStore moneyClaimStore,
+            SQLiteListingStore listingStore,
+            SQLiteItemClaimStore itemClaimStore,
+            SQLiteMoneyClaimStore moneyClaimStore,
             ItemIdentityResolver itemIdentityResolver,
             AdminHistoryService adminHistoryService,
             CategoryService categoryService,

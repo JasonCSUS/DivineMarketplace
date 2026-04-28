@@ -10,13 +10,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 
-/**
- * Loads and validates config.yml into MainConfig.
- *
- * This loader reads the live plugin-folder config, not the bundled jar resource.
- */
 public final class MainConfigLoader {
-
     public MainConfig load(JavaPlugin plugin) {
         File configFile = new File(plugin.getDataFolder(), "config.yml");
         if (!configFile.isFile()) {
@@ -26,6 +20,10 @@ public final class MainConfigLoader {
         FileConfiguration config = YamlConfiguration.loadConfiguration(configFile);
 
         MainConfig.Storage storage = new MainConfig.Storage(
+                new MainConfig.Database(
+                        config.getString("storage.database.sqliteFile", "data/market.db"),
+                        config.getString("storage.database.modulePrefix", "market")
+                ),
                 new MainConfig.Limits(
                         positiveInt(config, "storage.limits.salesHistoryMaxMb", 50),
                         positiveInt(config, "storage.limits.adminSalesHistoryMaxMb", 25),
@@ -33,9 +31,7 @@ public final class MainConfigLoader {
                         positiveInt(config, "storage.limits.adminClaimsHistoryMaxMb", 25),
                         positiveInt(config, "storage.limits.itemClaimsSoftMaxMb", 100)
                 ),
-                new MainConfig.Cleanup(
-                        positiveInt(config, "storage.cleanup.abandonedItemClaimDays", 30)
-                )
+                new MainConfig.Cleanup(positiveInt(config, "storage.cleanup.abandonedItemClaimDays", 30))
         );
 
         MainConfig.CustomItems customItems = new MainConfig.CustomItems(
@@ -45,6 +41,20 @@ public final class MainConfigLoader {
                 config.getBoolean("customItems.useClonedItemForPreviewTemplate", true),
                 config.getBoolean("customItems.requireAdminReviewForAllNewItems", true),
                 config.getBoolean("customItems.highPriorityOnlyForUnsafeResolution", true)
+        );
+
+        MainConfig.CustomItemIdentity customItemIdentity = new MainConfig.CustomItemIdentity(
+                new MainConfig.UnknownCustomModelData(
+                        config.getBoolean("customItemIdentity.unknownCustomModelData.enabled", true),
+                        config.getBoolean("customItemIdentity.unknownCustomModelData.autoCreateDefinition", true),
+                        config.getString("customItemIdentity.unknownCustomModelData.category", "unsorted")
+                ),
+                new MainConfig.MetadataSnapshots(
+                        config.getBoolean("customItemIdentity.metadataSnapshots.writeUnknownSnapshots", true),
+                        config.getBoolean("customItemIdentity.metadataSnapshots.writeInspectRawSnapshots", true),
+                        config.getString("customItemIdentity.metadataSnapshots.directory", "logs/custom_item_metadata")
+                ),
+                readCustomIdentityRules(config)
         );
 
         MainConfig.ListingPolicies listingPolicies = new MainConfig.ListingPolicies(
@@ -110,17 +120,32 @@ public final class MainConfigLoader {
                 config.getBoolean("ui.interceptAllInventoryClicks", true)
         );
 
-        return new MainConfig(
-                storage,
-                customItems,
-                listingPolicies,
-                claims,
-                packagesConfig,
-                market,
-                search,
-                admin,
-                ui
-        );
+        return new MainConfig(storage, customItems, customItemIdentity, listingPolicies, claims, packagesConfig, market, search, admin, ui);
+    }
+
+    private List<MainConfig.Rule> readCustomIdentityRules(FileConfiguration config) {
+        List<MainConfig.Rule> rules = new ArrayList<>();
+        List<?> rawList = config.getList("customItemIdentity.rules");
+        if (rawList == null) {
+            return rules;
+        }
+
+        for (Object rawEntry : rawList) {
+            if (!(rawEntry instanceof java.util.Map<?, ?> map)) {
+                continue;
+            }
+            rules.add(new MainConfig.Rule(
+                    stringValue(map.get("id"), "rule_" + (rules.size() + 1)),
+                    stringValue(map.get("source"), "any_key"),
+                    stringValue(map.get("section"), ""),
+                    stringValue(map.get("key"), ""),
+                    stringValue(map.get("resultMode"), "RAW_VALUE"),
+                    stringValue(map.get("prefix"), ""),
+                    booleanValue(map.get("appendMaterial"), false),
+                    booleanValue(map.get("appendCustomModelData"), false)
+            ));
+        }
+        return rules;
     }
 
     private List<MainConfig.ListingTier> readListingTiers(FileConfiguration config) {
@@ -134,15 +159,12 @@ public final class MainConfigLoader {
             if (!(rawEntry instanceof java.util.Map<?, ?> map)) {
                 continue;
             }
-
-            Object rawPermission = map.get("permission");
-            String permission = rawPermission == null ? "" : String.valueOf(rawPermission);
-            int maxListings = positiveInt(map.get("maxListings"), 15);
-            int listingDurationDays = positiveInt(map.get("listingDurationDays"), 7);
-
-            tiers.add(new MainConfig.ListingTier(permission, maxListings, listingDurationDays));
+            tiers.add(new MainConfig.ListingTier(
+                    stringValue(map.get("permission"), ""),
+                    positiveInt(map.get("maxListings"), 15),
+                    positiveInt(map.get("listingDurationDays"), 7)
+            ));
         }
-
         return tiers;
     }
 
@@ -155,18 +177,17 @@ public final class MainConfigLoader {
         }
     }
 
-    private int positiveInt(FileConfiguration config, String path, int fallback) {
-        return Math.max(1, config.getInt(path, fallback));
+    private String stringValue(Object rawValue, String fallback) {
+        return rawValue == null ? fallback : String.valueOf(rawValue);
     }
 
-    private int positiveInt(Object rawValue, int fallback) {
-        if (rawValue instanceof Number number) {
-            return Math.max(1, number.intValue());
-        }
+    private boolean booleanValue(Object rawValue, boolean fallback) {
+        if (rawValue instanceof Boolean bool) return bool;
+        if (rawValue instanceof String text) return Boolean.parseBoolean(text);
         return fallback;
     }
 
-    private double nonNegativeDouble(FileConfiguration config, String path, double fallback) {
-        return Math.max(0.0, config.getDouble(path, fallback));
-    }
+    private int positiveInt(FileConfiguration config, String path, int fallback) { return Math.max(1, config.getInt(path, fallback)); }
+    private int positiveInt(Object rawValue, int fallback) { return rawValue instanceof Number n ? Math.max(1, n.intValue()) : fallback; }
+    private double nonNegativeDouble(FileConfiguration config, String path, double fallback) { return Math.max(0.0, config.getDouble(path, fallback)); }
 }

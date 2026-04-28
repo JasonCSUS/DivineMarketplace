@@ -20,6 +20,7 @@ import org.bukkit.Material;
  * - marketDisplayName is the safe canonical grouped/subcategory label
  * - categoryId is the top-level browse category and may initially default to
  *   "unsorted" when auto-discovered
+ * - state tracks whether admins have explicitly reviewed the definition
  *
  * Important:
  * - the exact listed item snapshot is still what should be shown in the final
@@ -32,6 +33,20 @@ public record CustomItemDefinition(
         Material requiredMaterial,
         Float requiredCustomModelData,
         String marketDisplayName,
-        String categoryId
+        String categoryId,
+        CustomItemDefinitionState state
 ) {
+    public CustomItemDefinition {
+        if (state == null) {
+            state = CustomItemDefinitionState.CONFIRMED;
+        }
+    }
+
+    public boolean provisional() {
+        return state.provisional();
+    }
+
+    public CustomItemDefinition confirmed() {
+        return new CustomItemDefinition(itemType, requiredMaterial, requiredCustomModelData, marketDisplayName, categoryId, CustomItemDefinitionState.CONFIRMED);
+    }
 }

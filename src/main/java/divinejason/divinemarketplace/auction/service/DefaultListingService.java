@@ -7,8 +7,8 @@ import divinejason.divinemarketplace.auction.model.Listing;
 import divinejason.divinemarketplace.auction.model.ListingCreateFailureReason;
 import divinejason.divinemarketplace.auction.model.ListingCreateResult;
 import divinejason.divinemarketplace.auction.model.ResolvedItemDefinition;
-import divinejason.divinemarketplace.auction.persistence.BinaryItemClaimStore;
-import divinejason.divinemarketplace.auction.persistence.BinaryListingStore;
+import divinejason.divinemarketplace.auction.persistence.sqlite.SQLiteItemClaimStore;
+import divinejason.divinemarketplace.auction.persistence.sqlite.SQLiteListingStore;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.PlayerInventory;
@@ -27,8 +27,8 @@ public final class DefaultListingService implements ListingService {
     private static final String ADMIN_CANCEL_PERMISSION = "divinemarketplace.admin.listing.cancel";
     private static final String ADMIN_PERMISSION = "divinemarketplace.admin";
 
-    private final BinaryListingStore listingStore;
-    private final BinaryItemClaimStore itemClaimStore;
+    private final SQLiteListingStore listingStore;
+    private final SQLiteItemClaimStore itemClaimStore;
     private final ItemIdentityResolver itemIdentityResolver;
     private final AdminHistoryService adminHistoryService;
     private final CategoryService categoryService;
@@ -37,8 +37,8 @@ public final class DefaultListingService implements ListingService {
     private final ListingWriteHelper listingWriteHelper;
 
     public DefaultListingService(
-            BinaryListingStore listingStore,
-            BinaryItemClaimStore itemClaimStore,
+            SQLiteListingStore listingStore,
+            SQLiteItemClaimStore itemClaimStore,
             ItemIdentityResolver itemIdentityResolver,
             AdminHistoryService adminHistoryService,
             CategoryService categoryService,

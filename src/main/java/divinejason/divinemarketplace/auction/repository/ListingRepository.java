@@ -10,7 +10,7 @@ import java.util.UUID;
 /**
  * Logical listing repository abstraction.
  *
- * This may delegate to BinaryListingStore in v1.
+ * This may delegate to SQLite-backed store implementations in v1.
  */
 public interface ListingRepository {
     void saveOrReplace(Listing listing);

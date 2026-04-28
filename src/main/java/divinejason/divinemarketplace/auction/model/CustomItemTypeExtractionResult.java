@@ -1,0 +1,22 @@
+package divinejason.divinemarketplace.auction.model;
+
+import org.bukkit.Material;
+
+import java.util.List;
+
+public record CustomItemTypeExtractionResult(
+        boolean custom,
+        boolean treatAsVanilla,
+        boolean provisional,
+        String itemType,
+        Material requiredMaterial,
+        Float requiredCustomModelData,
+        String matchedRuleId,
+        String matchedValue,
+        String signature,
+        List<String> ruleTrace
+) {
+    public boolean hasCustomSignal() {
+        return custom && !treatAsVanilla && itemType != null && !itemType.isBlank();
+    }
+}

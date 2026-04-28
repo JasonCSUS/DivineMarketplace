@@ -3,7 +3,7 @@ package divinejason.divinemarketplace.auction.service;
 import divinejason.divinemarketplace.auction.model.Listing;
 import divinejason.divinemarketplace.auction.model.ListingCreateFailureReason;
 import divinejason.divinemarketplace.auction.model.ResolvedItemDefinition;
-import divinejason.divinemarketplace.auction.persistence.BinaryListingStore;
+import divinejason.divinemarketplace.auction.persistence.sqlite.SQLiteListingStore;
 import org.bukkit.inventory.ItemStack;
 
 import java.util.Objects;
@@ -17,12 +17,12 @@ import java.util.UUID;
  * - claim-to-listing relist flow
  */
 public final class ListingWriteHelper {
-    private final BinaryListingStore listingStore;
+    private final SQLiteListingStore listingStore;
     private final CategoryService categoryService;
     private final MarketAnalyticsService marketAnalyticsService;
 
     public ListingWriteHelper(
-            BinaryListingStore listingStore,
+            SQLiteListingStore listingStore,
             CategoryService categoryService,
             MarketAnalyticsService marketAnalyticsService
     ) {

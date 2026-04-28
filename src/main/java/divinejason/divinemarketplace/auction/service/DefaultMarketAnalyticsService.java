@@ -2,42 +2,35 @@ package divinejason.divinemarketplace.auction.service;
 
 import divinejason.divinemarketplace.auction.model.Listing;
 import divinejason.divinemarketplace.auction.model.SaleRecord;
-import divinejason.divinemarketplace.auction.persistence.BinarySalesStore;
+import divinejason.divinemarketplace.auction.persistence.sqlite.SQLiteSalesStore;
 
 import java.util.Objects;
 
-/**
- * Minimal concrete market analytics implementation.
- *
- * Current role:
- * - persist eligible SaleRecord entries into BinarySalesStore
- * - keep listing lifecycle hooks wired and harmless until richer analytics exist
- */
 public final class DefaultMarketAnalyticsService implements MarketAnalyticsService {
-    private final BinarySalesStore salesStore;
+    private final SQLiteSalesStore salesStore;
+    private final InMemorySaleHistoryIndex historyIndex;
 
-    public DefaultMarketAnalyticsService(BinarySalesStore salesStore) {
+    public DefaultMarketAnalyticsService(SQLiteSalesStore salesStore, InMemorySaleHistoryIndex historyIndex) {
         this.salesStore = Objects.requireNonNull(salesStore, "salesStore");
+        this.historyIndex = Objects.requireNonNull(historyIndex, "historyIndex");
     }
 
     @Override
     public void recordListingCreated(Listing listing) {
-        // richer analytics hooks can be added later
     }
 
     @Override
     public void recordSale(SaleRecord saleRecord) {
         salesStore.append(saleRecord);
         salesStore.purgeOldestIfOverMaxSize();
+        historyIndex.recordSale(saleRecord);
     }
 
     @Override
     public void recordListingCancelled(Listing listing) {
-        // richer analytics hooks can be added later
     }
 
     @Override
     public void recordListingExpired(Listing listing) {
-        // richer analytics hooks can be added later
     }
 }

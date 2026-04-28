@@ -12,17 +12,11 @@ import java.util.List;
 /**
  * Pure-Java market recommendation logic.
  *
- * Design goals:
- * - no calculus-heavy design
- * - mostly algebra + simple regression
- * - recommendations should move gradually toward stable averages
- * - strong market shifts should still be followed closely enough to avoid stale prices
- * - calculations should use integer currency internally where possible
- *
- * Notes:
- * - config values are read through ConfigService helper getters
- * - this class intentionally does not know anything about live Paper players,
- *   inventories, menus, or scheduling
+ * Current role:
+ * - produces an in-memory MarketProfile object during recalculation
+ * - does not assume persisted market_profiles.bin storage exists
+ * - lets recommendation math stay readable even though final recommended prices
+ *   are persisted elsewhere
  */
 public final class MarketProfileCalculator {
 
@@ -118,7 +112,6 @@ public final class MarketProfileCalculator {
         sorted.sort(Comparator.comparingLong(SaleRecord::soldAtEpochMillis));
 
         long firstTimestamp = sorted.get(0).soldAtEpochMillis();
-
         int count = sorted.size();
         double[] x = new double[count];
         double[] y = new double[count];
@@ -159,13 +152,7 @@ public final class MarketProfileCalculator {
             ssRes += Math.pow(actual - predicted, 2.0);
         }
 
-        double fitness;
-        if (ssTot <= 0.0) {
-            fitness = 0.0;
-        } else {
-            fitness = clamp(1.0 - (ssRes / ssTot), 0.0, 1.0);
-        }
-
+        double fitness = ssTot <= 0.0 ? 0.0 : clamp(1.0 - (ssRes / ssTot), 0.0, 1.0);
         return new TrendData(slope, fitness);
     }
 
@@ -201,11 +188,7 @@ public final class MarketProfileCalculator {
         }
 
         double differencePercent = percentDifference(currentRecommendation, target);
-        double baseAdjustmentPercent = classifyBaseAdjustmentPercent(
-                currentRecommendation,
-                target,
-                differencePercent
-        );
+        double baseAdjustmentPercent = classifyBaseAdjustmentPercent(currentRecommendation, target, differencePercent);
 
         if (baseAdjustmentPercent <= 0.0) {
             return currentRecommendation;
@@ -256,11 +239,7 @@ public final class MarketProfileCalculator {
         return 0L;
     }
 
-    private double classifyBaseAdjustmentPercent(
-            long currentRecommendation,
-            long target,
-            double differencePercent
-    ) {
+    private double classifyBaseAdjustmentPercent(long currentRecommendation, long target, double differencePercent) {
         double same = ConfigService.get().marketSamePercent();
         if (differencePercent <= same) {
             return 0.0;

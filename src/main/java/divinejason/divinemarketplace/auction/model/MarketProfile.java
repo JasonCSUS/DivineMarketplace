@@ -1,24 +1,17 @@
 package divinejason.divinemarketplace.auction.model;
 
 /**
- * Cached economics/profile state for one market key.
+ * In-memory market calculation result for one market key.
  *
- * This is the compact per-item cache that the plugin reads quickly during
- * commands, recommendation lookups, and slow-burn recalculation passes.
+ * Current role:
+ * - temporary output from MarketProfileCalculator during recalculation
+ * - not a persisted runtime cache file
+ * - used to keep recommendation math readable even though recommended prices are
+ *   ultimately written to market_prices.csv
  *
- * Raw sales/listings are scanned only when rebuilding or updating this cache.
- * The cache itself should stay minimal to avoid memory/storage bloat.
- *
- * Locked v1 fields:
- * - marketKey
- * - currentRecommendedUnitPrice
- * - averageSaleUnitPrice
- * - averageListingUnitPrice
- * - recentSaleSlope
- * - recentSaleSlopeFitness
- * - recentSaleSampleCount
- * - recentListingSampleCount
- * - lastRecalculatedAtEpochMillis
+ * Important:
+ * - this class is intentionally kept even though market_profiles.bin has been removed
+ * - storage/repository classes that used to persist it are now legacy deletion candidates
  */
 public record MarketProfile(
         String marketKey,

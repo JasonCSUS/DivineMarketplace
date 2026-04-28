@@ -1,89 +1,74 @@
 package divinejason.divinemarketplace.auction.service;
 
-import java.util.ArrayDeque;
-import java.util.Queue;
+import divinejason.divinemarketplace.setup.MarketRuntimeStateStore;
+import org.bukkit.Bukkit;
+import org.bukkit.plugin.java.JavaPlugin;
 
-/**
- * Slow-burn scheduler/worker for market profile recalculation.
- *
- * Responsibilities:
- * - compare current time against the global recalculation interval
- * - queue market keys that are eligible for recalculation
- * - skip items that were recalculated too recently
- * - process only a small number of market keys per run to avoid lag spikes
- * - support manual/emergency recalculation of a single market key
- *
- * Manual override notes:
- * - an admin may manually adjust/recalculate one item immediately
- * - that item's MarketProfile.lastRecalculatedAtEpochMillis should be updated
- * - the normal daily/global recalculation pass should then skip that marketKey
- *   until its per-item minimum interval has elapsed
- *
- * Scheduling notes:
- * - all v1 mutation should occur on the main server thread
- * - this class should spread work across many runs/ticks rather than doing one
- *   large recalculation pass in a single tick
- */
+import java.time.LocalDate;
+import java.util.Objects;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.logging.Logger;
+
 public final class MarketRecalculationService {
+    private final JavaPlugin plugin;
+    private final Logger logger;
+    private final FlattenedMarketIndexService marketIndexService;
+    private final PriceRecommendationService priceRecommendationService;
+    private final MarketRuntimeStateStore runtimeStateStore;
+    private final AtomicBoolean running = new AtomicBoolean(false);
 
-    private final Queue<String> pendingMarketKeys = new ArrayDeque<>();
-    private boolean recalculationRunning;
-    private long lastGlobalRecalculationStartEpochMillis;
+    public MarketRecalculationService(
+            JavaPlugin plugin,
+            FlattenedMarketIndexService marketIndexService,
+            PriceRecommendationService priceRecommendationService,
+            MarketRuntimeStateStore runtimeStateStore
+    ) {
+        this.plugin = Objects.requireNonNull(plugin, "plugin");
+        this.logger = plugin.getLogger();
+        this.marketIndexService = Objects.requireNonNull(marketIndexService, "marketIndexService");
+        this.priceRecommendationService = Objects.requireNonNull(priceRecommendationService, "priceRecommendationService");
+        this.runtimeStateStore = Objects.requireNonNull(runtimeStateStore, "runtimeStateStore");
+    }
 
-    public void tick(long nowEpochMillis) {
-        if (!recalculationRunning) {
-            if (shouldStartGlobalRecalculation(nowEpochMillis)) {
-                startGlobalRecalculation(nowEpochMillis);
-            }
+    public void scheduleStartupAndDailyChecks() {
+        checkAndScheduleDailyRecalculation();
+        Bukkit.getScheduler().runTaskTimerAsynchronously(plugin, this::checkAndScheduleDailyRecalculation, 20L * 60L * 60L, 20L * 60L * 60L);
+    }
+
+    public void checkAndScheduleDailyRecalculation() {
+        LocalDate today = LocalDate.now();
+        LocalDate lastDate = runtimeStateStore.getLastGlobalRecalcDate();
+        if (lastDate == null || today.isAfter(lastDate)) {
+            scheduleGlobalRecalculation();
+        }
+    }
+
+    public void scheduleGlobalRecalculation() {
+        if (!running.compareAndSet(false, true)) {
             return;
         }
 
-        processSmallBatch(nowEpochMillis);
+        Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
+            try {
+                int count = priceRecommendationService.forceRecalculateAll(marketIndexService.getKnownMarketKeys());
+                runtimeStateStore.setLastGlobalRecalcDate(LocalDate.now());
+                logger.info("Completed global market recalculation for " + count + " market keys.");
+            } catch (Exception exception) {
+                logger.warning("Global market recalculation failed: " + exception.getMessage());
+            } finally {
+                running.set(false);
+            }
+        });
     }
 
-    public void enqueueImmediateRecalculation(String marketKey) {
-        // PSEUDOCODE:
-        // add a single marketKey to the queue if not already queued
-        // allow admin/manual recalculation outside the normal daily pass
-        throw new UnsupportedOperationException("pseudocode scaffold");
-    }
-
-    private boolean shouldStartGlobalRecalculation(long nowEpochMillis) {
-        // PSEUDOCODE:
-        // compare now vs lastGlobalRecalculationStartEpochMillis using MainConfig/ConfigService
-        throw new UnsupportedOperationException("pseudocode scaffold");
-    }
-
-    private void startGlobalRecalculation(long nowEpochMillis) {
-        // PSEUDOCODE:
-        // clear queue
-        // gather all eligible market keys
-        // for each marketKey:
-        //   load old MarketProfile
-        //   if item was recalculated too recently -> skip
-        //   else queue it
-        // if queue is not empty:
-        //   recalculationRunning = true
-        //   lastGlobalRecalculationStartEpochMillis = now
-        throw new UnsupportedOperationException("pseudocode scaffold");
-    }
-
-    private void processSmallBatch(long nowEpochMillis) {
-        // PSEUDOCODE:
-        // process ConfigService.get().marketRecalcItemsPerRun() keys
-        // when queue is empty:
-        //   recalculationRunning = false
-        throw new UnsupportedOperationException("pseudocode scaffold");
-    }
-
-    private void recalculateOneMarketKey(String marketKey, long nowEpochMillis) {
-        // PSEUDOCODE:
-        // load old profile
-        // read recent sale history
-        // read active listings
-        // calculate new profile
-        // save new profile
-        // optionally append compact recommendation-history point if recommendation changed
-        throw new UnsupportedOperationException("pseudocode scaffold");
+    public void scheduleMarketRecalculation(String marketKey) {
+        Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
+            try {
+                priceRecommendationService.forceRecalculate(marketKey);
+                logger.info("Recalculated market price for " + marketKey);
+            } catch (Exception exception) {
+                logger.warning("Single market recalculation failed for " + marketKey + ": " + exception.getMessage());
+            }
+        });
     }
 }

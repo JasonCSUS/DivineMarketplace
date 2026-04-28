@@ -9,7 +9,7 @@ It is intentionally higher level than file-specific TODO comments.
 Purpose:
 - create missing folders/files/defaults on first startup
 - generate admin-facing helper files such as permissions.txt
-- leave runtime binary state files intact if they already exist
+- leave runtime database file intact if it already exists
 
 How it works:
 - main plugin class calls PluginFileInitializer first
@@ -169,7 +169,7 @@ Purpose:
 - maintain suggested prices for market groups
 
 How it works:
-- prices are based on training data only
+- prices are based on training data only and persisted to market_prices.csv
 - SaleRecord is the player-facing exact-sales dataset and also the source dataset for training
 - every SaleRecord is player-facing history by definition
 - SaleRecord stores:
@@ -188,22 +188,22 @@ How it works:
 10. Market calculator + scheduler
 ---------------------------------
 Purpose:
-- calculate compact per-market-key economics values without heavy Paper coupling
+- calculate per-market-key economics values without heavy Paper coupling
 - run recommendation recalculation slowly over many ticks
 - keep recommendations responsive without stalling server ticks
 
 How it works:
 - MarketProfileCalculator is mostly pure Java
-- it reads recent SaleRecord data + active Listing data and returns an updated MarketProfile
+- it reads recent SaleRecord data + active Listing data and may return an in-memory MarketProfile result
+- that MarketProfile is a temporary calculation object, not a persisted binary cache record
+- final recommended prices should be written to market_prices.csv
 - it should use simple averages, simple trend slope/fitness, and clamped rule-based movement
 - it should avoid calculus and rely mostly on algebra + simple regression
 - MarketRecalculationService should:
-  - compare current time against the global daily-style interval
-  - build a queue of eligible market keys
-  - skip items recalculated too recently
+  - compare the current day against a tiny global last-recalc-day state value
+  - build a queue of eligible market keys for the daily pass
   - process only a few market keys per run/tick
   - support manual/emergency item recalculation
-- manual recalculation should update lastRecalculatedAtEpochMillis so the next daily pass skips that item until its per-item timer allows it again
 
 11. Menu system layer
 ---------------------
@@ -427,3 +427,88 @@ Current direction:
   - players: category ids + market display names
   - admins: category ids + market display names + market keys for maintenance commands
 - unfinished menu-heavy/admin-maintenance commands can be recognized with friendly placeholder responses until their services are complete
+
+
+Legacy deletion marks
+---------------------
+These files are now decoupled from the live plugin and are safe deletion candidates:
+- auction/persistence/BinaryMarketProfileStore.java
+- auction/repository/MarketProfileRepository.java
+
+This file intentionally stays:
+- auction/model/MarketProfile.java
+because it still makes sense as a temporary calculation object for the recommendation layer.
+
+
+
+21. Price recommendation + browse slice
+---------------------------------------
+Purpose:
+- finish the CSV-backed recommendation path
+- replace placeholder browse/search behavior with real text-command data
+
+Current direction:
+- preload sales history into memory once at startup
+- keep recommended prices in market_prices.csv and load them into memory
+- use MarketProfileCalculator only as temporary in-memory math
+- schedule async recalculation jobs for one item or all items
+- rebuild category/market-group browse summaries from market_index.csv plus active listings
+- register /market for real in the main plugin
+
+SQLite migration note
+--------------------
+Use one local SQLite database for live runtime market state.
+
+Why:
+- less custom binary file maintenance
+- better write batching/transactions
+- easier future server/tool integration
+
+Transitional implementation rule:
+- keep existing store class names during migration to avoid wide service churn
+- move internals to SQLite first
+- rename classes later once the migration stabilizes
+
+
+Naming cleanup note
+-------------------
+Now that runtime storage is database-backed, live store class names should stop
+using the old Binary* prefix. Use SQLite*Store for active implementations and
+remove the stale Binary* files afterward.
+
+
+Flattened/runtime market data
+-----------------------------
+The remaining runtime market data layer is now expected to live in SQLite too.
+
+Direction:
+- flattened market index persists in SQLite table `market_index`
+- current recommended prices persist in SQLite table `market_prices`
+- compact daily price history persists in SQLite table `price_history`
+- category/custom definition files are still read as source definitions, then flattened into the runtime DB layer
+
+Final runtime wiring cleanup
+----------------------------
+Goal:
+- finish removing stale runtime references to the old CSV/YAML market data path
+
+Direction:
+- runtime browse/search/category/admin lookups should flow through SQLite-backed market index data
+- bootstrap YAML/category/custom files are only seed inputs when the DB table is empty
+- custom item registry writes should update SQLite-backed market index entries
+- admin sort/define should update the SQLite runtime index directly
+
+
+Fix pass
+--------
+- plugin.yml api-version should use the Minecraft API version, not the Paper artifact version
+- history export flags now require history.export permission
+- raw inspect snapshot writing now obeys config
+- provisional custom detections can now auto-log metadata snapshots when configured
+
+
+- plugin.yml uses Minecraft api-version 1.21 and keeps inspect/custom override permissions under the permissions block
+- provisional unknown custom items are now deduped when metadata snapshots are auto-written
+- provisional unknown custom items now stay unsorted/review-heavy and are excluded from player-facing market history/training
+- custom registry now guards against itemType/material+CMD collisions instead of silently overwriting
+- category/subcategory quantity displays are explicitly labeled as qty in text output

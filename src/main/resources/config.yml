@@ -6,6 +6,9 @@
 # - convert to decimal only when displaying values or calling Vault
 
 storage:
+  database:
+    sqliteFile: "data/market.db"
+    modulePrefix: "market"
   limits:
     salesHistoryMaxMb: 50
     adminSalesHistoryMaxMb: 25
@@ -86,3 +89,46 @@ ui:
   showEmptyTopLevelCategories: true
   showListingCountsInCategoryLore: true
   interceptAllInventoryClicks: true
+
+
+customItemIdentity:
+  # Runtime custom identity pipeline:
+  # 1) treat-as-vanilla override
+  # 2) existing confirmed definition by stable itemType or material+CMD fallback
+  # 3) ordered exact-key rules below (first match wins)
+  # 4) unknown custom-model-data fallback
+  # 5) vanilla fallback
+  unknownCustomModelData:
+    enabled: true
+    autoCreateDefinition: true
+    category: "unsorted"
+  metadataSnapshots:
+    # Unknown/provisional snapshots are deduped by stable signature.
+    writeUnknownSnapshots: true
+    writeInspectRawSnapshots: true
+    directory: "logs/custom_item_metadata"
+  rules:
+    - id: "server_item_type"
+      source: "any_key"
+      key: "item_type"
+      resultMode: "RAW_VALUE"
+      prefix: ""
+      appendMaterial: false
+      appendCustomModelData: false
+
+    - id: "mythicmobs_type"
+      source: "public_bukkit_values"
+      key: "mythicmobs:type"
+      resultMode: "PREFIXED_VALUE"
+      prefix: "mythicmobs"
+      appendMaterial: false
+      appendCustomModelData: false
+
+    - id: "itemsadder_namespace"
+      source: "serialize_section"
+      section: "itemsadder"
+      key: "namespace"
+      resultMode: "PREFIXED_VALUE"
+      prefix: "itemsadder"
+      appendMaterial: true
+      appendCustomModelData: true

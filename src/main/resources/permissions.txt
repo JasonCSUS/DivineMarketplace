@@ -42,6 +42,15 @@ divinemarketplace.admin.enchant.define
 divinemarketplace.admin.flagged.view
   View flagged / review-needed items.
 
+divinemarketplace.admin.collisions.view
+  View custom item collision log entries in-game.
+
+divinemarketplace.admin.inspect
+  Inspect held item metadata, rule matches, and raw snapshot output.
+
+divinemarketplace.admin.custom.override
+  Mark held items as treat-as-vanilla or remove those overrides.
+
 Config-defined premium tier permissions
 ---------------------------------------
 Premium listing tier permissions are NOT fixed in code.

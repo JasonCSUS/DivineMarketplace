@@ -3,9 +3,11 @@ package divinejason.divinemarketplace.auction.model;
 /**
  * Runtime dynamic subcategory entry.
  *
- * Subcategories are generated only from active listings and should never render
- * large pages of empty entries. previewIconKey is a UI hint only; the actual icon
- * is built later by MarketIconResolver.
+ * Important:
+ * - activeListingCount represents total listed item quantity for the market group
+ * - it is intentionally quantity-oriented market flow data, not number of listing records
+ *
+ * previewIconKey is a UI hint only; the actual icon is built later by MarketIconResolver.
  */
 public record SubcategorySummary(
         String marketKey,

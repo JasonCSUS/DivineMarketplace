@@ -30,17 +30,10 @@ plugins/DivineMarketplace/
     exports/
 
   data/
-    listings.bin
-    item_claims.bin
-    money_claims.bin
-    sales.bin
-    market_profiles.bin
+    market.db
     package_cache.bin
     unknown_custom_items.bin
     unknown_custom_enchants.bin
-    admin_sales.bin
-    admin_listings.bin
-    admin_claims.bin
 ```
 
 ### Main config access
@@ -157,21 +150,20 @@ plugins/DivineMarketplace/
 - mixed books remain in history but are excluded from training
 
 ## Still needs discussion
-- final `MarketProfile` field set
-- exact recommendation-history / compact price-history model if included in v1
 - exact command outputs for market profile / history views
 
 ### Market calculator + scheduler
 - `MarketProfileCalculator` is mostly pure Java and should stay minimally dependent on Paper/Bukkit
+- it may still return a `MarketProfile` object as an in-memory calculation result only
 - use averages + simple regression slope/fitness + clamped rule-based movement
 - avoid calculus
 - `MarketRecalculationService` should:
-  - compare last global recalc time against current time
-  - queue market keys that are eligible
-  - skip items recalculated too recently
+  - compare the current day against a tiny global last-recalc-day state value
+  - queue all eligible market keys for the daily pass
   - process only a small number of items per run/tick
   - support manual/emergency single-item recalculation
-- manual item recalculation should update `lastRecalculatedAtEpochMillis` so the next global/daily pass skips that item until the per-item interval has elapsed
+- final recommended prices should be written to `market_prices.csv`
+- no live plugin wiring should depend on `market_profiles.bin`
 
 ### Menu system outline
 - chest menus are now storyboarded enough to scaffold clean menu architecture
@@ -206,7 +198,7 @@ plugins/DivineMarketplace/
 - command scaffolds are aligned to the locked v1 flow
 
 ### Pseudocode intentionally deferred / still slightly fuzzy
-- exact singular/mixed enchant Sale History query implementation details inside `BinarySalesStore` / `HistoryService`
+- exact singular/mixed enchant Sale History query implementation details inside `SQLiteSalesStore` / `HistoryService`
 - exact Paper inventory API details for safe item removal/delivery while preserving the locked behavior
 - exact registration/bootstrap wiring in `DivineMarketplace.java`
 - old duplicate UI package under `auction/ui/**` should be removed so the new `menu/**` package is the only menu system
@@ -329,3 +321,84 @@ plugins/DivineMarketplace/
   - claim earnings
   - text-based sale history lookup
 - menu-heavy or unfinished maintenance commands may remain explicit placeholders until their backing services are finished
+
+
+### Legacy profile persistence decoupling
+- `BinaryMarketProfileStore.java` is decoupled from live plugin wiring and marked safe for deletion
+- `MarketProfileRepository.java` is decoupled from live plugin wiring and marked safe for deletion
+- `MarketProfile.java` remains intentionally alive as an in-memory calculation object
+
+
+### Price recommendation + browse slice
+- `DefaultPriceRecommendationService` now owns market_prices.csv load/save and in-memory price state
+- `InMemorySaleHistoryIndex` preloads the sales binary into memory at startup for text history/pricehistory/recalc queries
+- `MarketRecalculationService` should schedule async single-item or global recalculation jobs and update the tiny runtime-state day file
+- `/market` should now be registered in `DivineMarketplace.onEnable()`
+- `DefaultCategoryService` should be a real browse/index layer backed by market_index.csv + active listings, not a no-op
+- text command paths should prefer:
+  - player display names for player UX
+  - market keys + display names for admin maintenance UX
+
+### SQLite runtime storage migration
+- core runtime transaction state is moving off ad hoc binary files and into one local SQLite database
+- the current migration keeps existing store class names temporarily to avoid a huge service-layer rename
+- first migrated live tables:
+  - listings
+  - item_claims
+  - money_claims
+  - sales
+  - admin_sales
+  - admin_listings
+  - admin_claims
+  - runtime_state
+- `BinaryStoreSupport.java` and `BinaryAdminStoreSupport.java` are now deletion candidates once no stale references remain
+
+
+### Store naming cleanup after SQLite migration
+- live database-backed stores should now use explicit SQLite naming:
+  - `SQLiteListingStore`
+  - `SQLiteItemClaimStore`
+  - `SQLiteMoneyClaimStore`
+  - `SQLiteSalesStore`
+  - `SQLiteAdminSalesStore`
+  - `SQLiteAdminListingsStore`
+  - `SQLiteAdminClaimsStore`
+- `SQLiteBlobCodecSupport` should be renamed to `SQLiteRecordCodecSupport`
+- legacy `Binary*Store` file names become deletion candidates once references are updated
+
+
+### SQLite-backed runtime storage
+- live runtime market state should now persist in SQLite tables inside `data/market.db`
+- current migrated runtime tables include:
+  - market_index
+  - market_prices
+  - price_history
+  - listings
+  - item_claims
+  - money_claims
+  - sales
+  - admin_sales
+  - admin_listings
+  - admin_claims
+  - runtime_state
+- category/custom definition text files remain the editable source layer
+- flattened runtime lookup and current recommendation data should no longer depend on CSV persistence
+
+### Final runtime wiring cleanup
+- live runtime category/search/admin wiring should now read from SQLite-backed market index data, not from the old generated CSV/YAML runtime path
+- seed YAML/resource files remain bootstrapping inputs only when the SQLite market index is empty
+- custom item definitions should now load/write through the SQLite-backed market index table
+- admin sort/define commands should mutate the SQLite-backed market index, not category YAML files
+- custom item extraction now uses a generic persistent-data-key heuristic instead of the old no-op extractor
+
+
+- plugin.yml permission nodes for inspect/custom override are now under the permissions block
+- inspect raw now obeys config, and history exports require export permission
+- provisional unknown snapshot logging is now wired through the item identity resolver
+
+
+- plugin.yml uses Minecraft api-version 1.21 and keeps inspect/custom override permissions under the permissions block
+- provisional unknown custom items are now deduped when metadata snapshots are auto-written
+- provisional unknown custom items now stay unsorted/review-heavy and are excluded from player-facing market history/training
+- custom registry now guards against itemType/material+CMD collisions instead of silently overwriting
+- category/subcategory quantity displays are explicitly labeled as qty in text output

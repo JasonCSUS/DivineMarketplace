@@ -1,9 +1,9 @@
 package divinejason.divinemarketplace.auction.service;
 
 import divinejason.divinemarketplace.auction.model.AdminTransactionRecord;
-import divinejason.divinemarketplace.auction.persistence.BinaryAdminClaimsStore;
-import divinejason.divinemarketplace.auction.persistence.BinaryAdminListingsStore;
-import divinejason.divinemarketplace.auction.persistence.BinaryAdminSalesStore;
+import divinejason.divinemarketplace.auction.persistence.sqlite.SQLiteAdminClaimsStore;
+import divinejason.divinemarketplace.auction.persistence.sqlite.SQLiteAdminListingsStore;
+import divinejason.divinemarketplace.auction.persistence.sqlite.SQLiteAdminSalesStore;
 
 import java.util.List;
 import java.util.Optional;
@@ -18,14 +18,14 @@ import java.util.UUID;
  * - no Paper player/menu logic lives here
  */
 public final class DefaultAdminHistoryService implements AdminHistoryService {
-    private final BinaryAdminSalesStore adminSalesStore;
-    private final BinaryAdminListingsStore adminListingsStore;
-    private final BinaryAdminClaimsStore adminClaimsStore;
+    private final SQLiteAdminSalesStore adminSalesStore;
+    private final SQLiteAdminListingsStore adminListingsStore;
+    private final SQLiteAdminClaimsStore adminClaimsStore;
 
     public DefaultAdminHistoryService(
-            BinaryAdminSalesStore adminSalesStore,
-            BinaryAdminListingsStore adminListingsStore,
-            BinaryAdminClaimsStore adminClaimsStore
+            SQLiteAdminSalesStore adminSalesStore,
+            SQLiteAdminListingsStore adminListingsStore,
+            SQLiteAdminClaimsStore adminClaimsStore
     ) {
         this.adminSalesStore = adminSalesStore;
         this.adminListingsStore = adminListingsStore;

@@ -7,8 +7,8 @@ import divinejason.divinemarketplace.auction.model.Listing;
 import divinejason.divinemarketplace.auction.model.ListingCreateFailureReason;
 import divinejason.divinemarketplace.auction.model.ListingCreateResult;
 import divinejason.divinemarketplace.auction.model.ResolvedItemDefinition;
-import divinejason.divinemarketplace.auction.persistence.BinaryItemClaimStore;
-import divinejason.divinemarketplace.auction.persistence.BinaryMoneyClaimStore;
+import divinejason.divinemarketplace.auction.persistence.sqlite.SQLiteItemClaimStore;
+import divinejason.divinemarketplace.auction.persistence.sqlite.SQLiteMoneyClaimStore;
 import net.milkbowl.vault.economy.Economy;
 import net.milkbowl.vault.economy.EconomyResponse;
 import org.bukkit.entity.Player;
@@ -26,8 +26,8 @@ import java.util.UUID;
  * - item delivery now uses StorageItemDeliveryHelper instead of duplicating storage-contents logic
  */
 public final class DefaultClaimService implements ClaimService {
-    private final BinaryItemClaimStore itemClaimStore;
-    private final BinaryMoneyClaimStore moneyClaimStore;
+    private final SQLiteItemClaimStore itemClaimStore;
+    private final SQLiteMoneyClaimStore moneyClaimStore;
     private final ItemIdentityResolver itemIdentityResolver;
     private final AdminHistoryService adminHistoryService;
     private final Economy economy;
@@ -36,8 +36,8 @@ public final class DefaultClaimService implements ClaimService {
     private final ListingWriteHelper listingWriteHelper;
 
     public DefaultClaimService(
-            BinaryItemClaimStore itemClaimStore,
-            BinaryMoneyClaimStore moneyClaimStore,
+            SQLiteItemClaimStore itemClaimStore,
+            SQLiteMoneyClaimStore moneyClaimStore,
             ItemIdentityResolver itemIdentityResolver,
             AdminHistoryService adminHistoryService,
             Economy economy,

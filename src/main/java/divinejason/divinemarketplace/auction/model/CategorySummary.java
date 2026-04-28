@@ -3,8 +3,10 @@ package divinejason.divinemarketplace.auction.model;
 /**
  * Runtime top-level category summary.
  *
- * This is separate from CategoryDefinition so the config stays simple while the
- * UI can attach live listing counts as lore.
+ * Important:
+ * - activeListingCount represents the number of active listing records
+ * - it is not the total stacked item quantity
+ * - subcategory summaries carry quantity-oriented listed amount data
  */
 public record CategorySummary(
         String categoryId,

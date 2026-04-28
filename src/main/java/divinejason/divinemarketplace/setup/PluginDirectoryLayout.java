@@ -6,8 +6,9 @@ import java.util.List;
 /**
  * Central path blueprint for the on-disk plugin layout.
  *
- * The bundled resources are copied into this live plugin folder on first run.
- * After that, loaders should read only the live plugin-folder files.
+ * Current storage direction:
+ * - core runtime market state is moving into SQLite
+ * - bundled defaults and editable custom definitions remain as text files
  */
 public final class PluginDirectoryLayout {
     private PluginDirectoryLayout() {
@@ -33,17 +34,10 @@ public final class PluginDirectoryLayout {
     public static final String LOG_UNKNOWN_CUSTOM_ENCHANTS = "logs/unknown_custom_enchants.log";
     public static final String LOG_EXPORTS_DIR = "logs/exports";
 
-    public static final String DATA_LISTINGS = "data/listings.bin";
-    public static final String DATA_ITEM_CLAIMS_DIR = "data/item_claims";
-    public static final String DATA_MONEY_CLAIMS = "data/money_claims.bin";
-    public static final String DATA_SALES = "data/sales.bin";
-    public static final String DATA_MARKET_PROFILES = "data/market_profiles.bin";
+    public static final String DATA_MARKET_DB = "data/market.db";
     public static final String DATA_PACKAGE_CACHE = "data/package_cache.bin";
     public static final String DATA_UNKNOWN_CUSTOM_ITEMS = "data/unknown_custom_items.bin";
     public static final String DATA_UNKNOWN_CUSTOM_ENCHANTS = "data/unknown_custom_enchants.bin";
-    public static final String DATA_ADMIN_SALES = "data/admin_sales.bin";
-    public static final String DATA_ADMIN_LISTINGS = "data/admin_listings.bin";
-    public static final String DATA_ADMIN_CLAIMS = "data/admin_claims.bin";
 
     public static Path resolveConfigFile(Path dataFolder) {
         return dataFolder.resolve(CONFIG_YML);
@@ -73,16 +67,8 @@ public final class PluginDirectoryLayout {
         return DEFAULTS_CATEGORY_RESOURCE_PREFIX + categoryId + ".yml";
     }
 
-    public static Path resolveItemClaimsDirectory(Path dataFolder) {
-        return dataFolder.resolve(DATA_ITEM_CLAIMS_DIR);
-    }
-
-    public static Path resolveItemClaimShardFile(Path dataFolder, int shardIndex) {
-        return resolveItemClaimsDirectory(dataFolder).resolve(String.format("shard_%02x.bin", shardIndex));
-    }
-
-    public static Path resolveItemClaimShardMetaFile(Path dataFolder, int shardIndex) {
-        return resolveItemClaimsDirectory(dataFolder).resolve(String.format("shard_%02x.meta", shardIndex));
+    public static Path resolveMarketDatabaseFile(Path dataFolder) {
+        return dataFolder.resolve(DATA_MARKET_DB);
     }
 
     public static List<Path> requiredDirectories(Path dataFolder) {
@@ -92,23 +78,15 @@ public final class PluginDirectoryLayout {
                 dataFolder.resolve(CUSTOM_DIR),
                 dataFolder.resolve(LOGS_DIR),
                 dataFolder.resolve(LOG_EXPORTS_DIR),
-                dataFolder.resolve(DATA_DIR),
-                resolveItemClaimsDirectory(dataFolder)
+                dataFolder.resolve(DATA_DIR)
         );
     }
 
     public static List<Path> requiredBinaryStateFiles(Path dataFolder) {
         return List.of(
-                dataFolder.resolve(DATA_LISTINGS),
-                dataFolder.resolve(DATA_MONEY_CLAIMS),
-                dataFolder.resolve(DATA_SALES),
-                dataFolder.resolve(DATA_MARKET_PROFILES),
                 dataFolder.resolve(DATA_PACKAGE_CACHE),
                 dataFolder.resolve(DATA_UNKNOWN_CUSTOM_ITEMS),
-                dataFolder.resolve(DATA_UNKNOWN_CUSTOM_ENCHANTS),
-                dataFolder.resolve(DATA_ADMIN_SALES),
-                dataFolder.resolve(DATA_ADMIN_LISTINGS),
-                dataFolder.resolve(DATA_ADMIN_CLAIMS)
+                dataFolder.resolve(DATA_UNKNOWN_CUSTOM_ENCHANTS)
         );
     }
 

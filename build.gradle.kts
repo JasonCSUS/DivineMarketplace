@@ -21,6 +21,8 @@ dependencies {
     compileOnly("com.github.MilkBowl:VaultAPI:1.7") {
         isTransitive = false
     }
+    implementation("org.xerial:sqlite-jdbc:3.45.3.0")
+    implementation("com.zaxxer:HikariCP:5.1.0")
     // TODO: add compileOnly dependencies for ItemsAdder / IceStorm when the exact
     // API artifacts used by the server are confirmed.
 }
