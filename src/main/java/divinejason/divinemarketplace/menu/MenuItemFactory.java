@@ -1,5 +1,9 @@
 package divinejason.divinemarketplace.menu;
 
+
+/*
+ * File role: Creates display ItemStacks for all GUI buttons, listing cards, claim cards, and history entries.
+ */
 import divinejason.divinemarketplace.auction.model.CategorySummary;
 import divinejason.divinemarketplace.auction.model.EnchantBrowseSummary;
 import divinejason.divinemarketplace.auction.model.ItemClaimRecord;

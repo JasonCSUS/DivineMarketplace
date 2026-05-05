@@ -1,5 +1,9 @@
 package divinejason.divinemarketplace.auction.model;
 
+
+/*
+ * File role: Carries immutable sale record data between marketplace services, persistence stores, commands, and GUI rendering.
+ */
 import org.bukkit.inventory.ItemStack;
 
 /**

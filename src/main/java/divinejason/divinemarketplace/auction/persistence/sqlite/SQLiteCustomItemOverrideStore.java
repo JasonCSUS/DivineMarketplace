@@ -1,5 +1,9 @@
 package divinejason.divinemarketplace.auction.persistence.sqlite;
 
+
+/*
+ * File role: Persists and queries custom item override records in SQLite while exposing size/retention helpers where needed.
+ */
 import divinejason.divinemarketplace.auction.model.CustomItemOverrideRecord;
 import divinejason.divinemarketplace.storage.sqlite.SQLiteStore;
 

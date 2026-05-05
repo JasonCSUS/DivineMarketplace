@@ -1,5 +1,9 @@
 package divinejason.divinemarketplace.auction.model;
 
+
+/*
+ * File role: Carries immutable enchant browse summary data between marketplace services, persistence stores, commands, and GUI rendering.
+ */
 /**
  * First-layer enchanted-book browse summary.
  *

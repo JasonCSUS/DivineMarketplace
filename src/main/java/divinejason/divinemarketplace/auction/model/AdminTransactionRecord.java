@@ -1,5 +1,9 @@
 package divinejason.divinemarketplace.auction.model;
 
+
+/*
+ * File role: Carries immutable admin transaction record data between marketplace services, persistence stores, commands, and GUI rendering.
+ */
 import java.util.UUID;
 
 /**

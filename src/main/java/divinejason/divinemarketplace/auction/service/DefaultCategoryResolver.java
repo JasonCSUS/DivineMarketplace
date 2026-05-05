@@ -1,5 +1,9 @@
 package divinejason.divinemarketplace.auction.service;
 
+
+/*
+ * File role: Implements category resolver behavior using the SQLite stores, config registries, and item identity services.
+ */
 import divinejason.divinemarketplace.auction.model.FlattenedMarketIndexEntry;
 import org.bukkit.Material;
 import org.bukkit.inventory.ItemStack;

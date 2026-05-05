@@ -1,5 +1,9 @@
 package divinejason.divinemarketplace.command;
 
+
+/*
+ * File role: Handles the market price admin command subcommand group and keeps its permission checks, parsing, and output in one file.
+ */
 import org.bukkit.command.CommandSender;
 
 import java.util.ArrayList;

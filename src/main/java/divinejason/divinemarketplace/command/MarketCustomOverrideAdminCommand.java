@@ -1,5 +1,9 @@
 package divinejason.divinemarketplace.command;
 
+
+/*
+ * File role: Handles the market custom override admin command subcommand group and keeps its permission checks, parsing, and output in one file.
+ */
 import divinejason.divinemarketplace.auction.model.CustomItemTypeExtractionResult;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;

@@ -1,5 +1,9 @@
 package divinejason.divinemarketplace.auction.model;
 
+
+/*
+ * File role: Carries immutable listing data between marketplace services, persistence stores, commands, and GUI rendering.
+ */
 import org.bukkit.inventory.ItemStack;
 
 import java.util.UUID;
@@ -9,7 +13,7 @@ import java.util.UUID;
  *
  * Important:
  * - categoryId is stored directly on the listing so browsing/index refresh does
- *   not need to re-resolve item identity later
+ *   do not need to re-resolve item identity during browse, purchase, or claim flows
  * - merge should only happen when the incoming item is compatible with the
  *   existing active listing, including seller, market identity, category,
  *   price, duration, and item similarity ignoring amount

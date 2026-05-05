@@ -6,7 +6,7 @@ bin/
 # Editor settings
 .vscode/
 
-# Stale files/folders scheduled for removal
+# Prevent accidental re-add of removed legacy files/folders
 DELETE_STALE_FILES.txt
 src/main/java/divinejason/divinemarketplace/auction/model/ClaimRecord.java
 src/main/java/divinejason/divinemarketplace/auction/ui/

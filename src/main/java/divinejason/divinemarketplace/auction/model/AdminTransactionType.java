@@ -1,5 +1,9 @@
 package divinejason.divinemarketplace.auction.model;
 
+
+/*
+ * File role: Enumerates admin transaction type values used by marketplace services, persistence, commands, and GUI rendering.
+ */
 /**
  * Broad admin-audit event types.
  */

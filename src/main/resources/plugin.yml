@@ -1,3 +1,5 @@
+# Bukkit/Paper plugin descriptor.
+# Registers the main plugin class, /market command, dependencies, and built-in permissions.
 name: DivineMarketplace
 version: 1.0.0
 main: divinejason.divinemarketplace.DivineMarketplace
@@ -36,6 +38,7 @@ permissions:
       divinemarketplace.admin.collisions.view: true
       divinemarketplace.admin.inspect: true
       divinemarketplace.admin.custom.override: true
+      divinemarketplace.admin.storage: true
   divinemarketplace.admin.reload:
     description: Reload DivineMarketplace configs and cached runtime state
     default: op
@@ -74,4 +77,7 @@ permissions:
     default: op
   divinemarketplace.admin.custom.override:
     description: Mark held false-positive custom items as vanilla or remove overrides
+    default: op
+  divinemarketplace.admin.storage:
+    description: View SQLite storage usage and run retention cleanup
     default: op

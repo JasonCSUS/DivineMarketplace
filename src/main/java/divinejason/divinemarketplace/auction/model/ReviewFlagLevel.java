@@ -1,5 +1,9 @@
 package divinejason.divinemarketplace.auction.model;
 
+
+/*
+ * File role: Enumerates review flag level values used by marketplace services, persistence, commands, and GUI rendering.
+ */
 /**
  * Administrative attention level for an item or definition.
  *

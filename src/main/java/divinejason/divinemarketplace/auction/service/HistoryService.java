@@ -1,5 +1,9 @@
 package divinejason.divinemarketplace.auction.service;
 
+
+/*
+ * File role: Defines the service contract for history service so command, GUI, and runtime code share one behavior boundary.
+ */
 import divinejason.divinemarketplace.auction.model.RecommendationHistoryPoint;
 import divinejason.divinemarketplace.auction.model.SaleRecord;
 

@@ -1,3 +1,5 @@
+# Default membership list for the enchanted books category.
+# Copied to plugins/DivineMarketplace/categories/ on first install; server edits are preserved on reload.
 categoryId: enchanted_books
 items:
   - ENCHANTED_BOOK

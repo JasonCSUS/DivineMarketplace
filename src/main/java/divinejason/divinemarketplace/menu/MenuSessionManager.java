@@ -1,5 +1,9 @@
 package divinejason.divinemarketplace.menu;
 
+
+/*
+ * File role: Stores per-player menu sessions and slot-action maps in UUID-keyed memory shards for concurrent users.
+ */
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;

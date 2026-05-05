@@ -1,5 +1,9 @@
 package divinejason.divinemarketplace.setup;
 
+
+/*
+ * File role: Centralizes plugin data-folder paths so setup, stores, logs, and helper files resolve to the same locations.
+ */
 import java.nio.file.Path;
 import java.util.List;
 

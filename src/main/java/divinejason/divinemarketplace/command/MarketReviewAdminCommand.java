@@ -1,5 +1,9 @@
 package divinejason.divinemarketplace.command;
 
+
+/*
+ * File role: Handles the market review admin command subcommand group and keeps its permission checks, parsing, and output in one file.
+ */
 import divinejason.divinemarketplace.auction.model.FlattenedMarketIndexEntry;
 import org.bukkit.command.CommandSender;
 

@@ -1,5 +1,9 @@
 package divinejason.divinemarketplace.auction.service;
 
+
+/*
+ * File role: Contains marketplace service logic for serialized item signal view.
+ */
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;

@@ -1,5 +1,9 @@
 package divinejason.divinemarketplace.menu;
 
+
+/*
+ * File role: Builds Bukkit inventories from MenuSession state and returns the matching slot-action map for the listener.
+ */
 import divinejason.divinemarketplace.auction.model.CategorySummary;
 import divinejason.divinemarketplace.auction.model.EnchantBrowseGroup;
 import divinejason.divinemarketplace.auction.model.EnchantBrowseSummary;

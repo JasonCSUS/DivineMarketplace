@@ -1,1 +1,3 @@
+# Defines custom enchant metadata used for display names and target-group browsing.
+# Runtime admin-defined enchant metadata is stored in SQLite after startup.
 enchants:

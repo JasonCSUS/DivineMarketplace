@@ -1,5 +1,9 @@
 package divinejason.divinemarketplace.auction.service;
 
+
+/*
+ * File role: Implements listing service behavior using the SQLite stores, config registries, and item identity services.
+ */
 import divinejason.divinemarketplace.auction.model.AdminTransactionRecord;
 import divinejason.divinemarketplace.auction.model.AdminTransactionType;
 import divinejason.divinemarketplace.auction.model.ItemClaimRecord;

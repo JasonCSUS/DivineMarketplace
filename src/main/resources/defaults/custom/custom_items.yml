@@ -1,1 +1,3 @@
+# Seeds configured custom item definitions for item identity resolution.
+# Runtime discoveries/admin definitions are stored in SQLite market_index and logged for review.
 items:

@@ -1,5 +1,9 @@
 package divinejason.divinemarketplace.auction.service;
 
+
+/*
+ * File role: Implements custom item registry behavior using the SQLite stores, config registries, and item identity services.
+ */
 import divinejason.divinemarketplace.auction.model.CustomItemDefinition;
 import org.bukkit.Material;
 

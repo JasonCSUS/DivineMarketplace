@@ -1,5 +1,9 @@
 package divinejason.divinemarketplace.command;
 
+
+/*
+ * File role: Dispatches /market subcommands, opens GUI entry points, and delegates admin/player work to focused handlers.
+ */
 import divinejason.divinemarketplace.DivineMarketplace;
 import divinejason.divinemarketplace.auction.persistence.sqlite.SQLiteCustomEnchantStore;
 import divinejason.divinemarketplace.auction.persistence.sqlite.SQLiteCustomItemOverrideStore;

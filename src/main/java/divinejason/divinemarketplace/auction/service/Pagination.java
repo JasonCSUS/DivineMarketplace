@@ -1,5 +1,9 @@
 package divinejason.divinemarketplace.auction.service;
 
+
+/*
+ * File role: Contains marketplace service logic for pagination.
+ */
 import java.util.List;
 
 /**

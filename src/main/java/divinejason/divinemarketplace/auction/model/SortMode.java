@@ -1,5 +1,9 @@
 package divinejason.divinemarketplace.auction.model;
 
+
+/*
+ * File role: Enumerates sort mode values used by marketplace services, persistence, commands, and GUI rendering.
+ */
 /**
  * Locked UI sort modes for listing-heavy screens.
  *

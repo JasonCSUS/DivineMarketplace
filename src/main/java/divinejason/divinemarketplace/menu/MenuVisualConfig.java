@@ -1,5 +1,9 @@
 package divinejason.divinemarketplace.menu;
 
+
+/*
+ * File role: Holds validated GUI titles, slots, slot lists, and icon overrides loaded from menu.yml.
+ */
 import org.bukkit.Material;
 
 import java.util.LinkedHashMap;

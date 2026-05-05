@@ -1,5 +1,9 @@
 package divinejason.divinemarketplace.auction.model;
 
+
+/*
+ * File role: Carries immutable market profile data between marketplace services, persistence stores, commands, and GUI rendering.
+ */
 /**
  * In-memory market calculation result for one market key.
  *

@@ -1,5 +1,9 @@
 package divinejason.divinemarketplace.auction.model;
 
+
+/*
+ * File role: Enumerates market history participation values used by marketplace services, persistence, commands, and GUI rendering.
+ */
 /**
  * Whether an item/sale should appear in player-facing market history.
  *

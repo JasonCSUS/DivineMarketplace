@@ -1,5 +1,9 @@
 package divinejason.divinemarketplace.menu;
 
+
+/*
+ * File role: Executes GUI click actions by updating menu state or calling live marketplace services on the Bukkit thread.
+ */
 import divinejason.divinemarketplace.auction.model.ClaimItemResult;
 import divinejason.divinemarketplace.auction.model.ClaimMoneyResult;
 import divinejason.divinemarketplace.auction.model.Listing;

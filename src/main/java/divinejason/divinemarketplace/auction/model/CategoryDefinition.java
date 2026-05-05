@@ -1,5 +1,9 @@
 package divinejason.divinemarketplace.auction.model;
 
+
+/*
+ * File role: Carries immutable category definition data between marketplace services, persistence stores, commands, and GUI rendering.
+ */
 /**
  * Config-defined top-level browse category.
  *
@@ -11,7 +15,7 @@ package divinejason.divinemarketplace.auction.model;
  *
  * iconKey should stay flexible enough for:
  * - vanilla materials like STONE or DIAMOND_SWORD
- * - future ItemAdder/custom item ids such as itemsadder:some_icon
+ * - custom/resource-pack icon ids such as itemsadder:some_icon when an icon resolver supports them
  */
 public record CategoryDefinition(
         String id,

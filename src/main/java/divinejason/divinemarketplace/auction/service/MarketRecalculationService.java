@@ -1,5 +1,9 @@
 package divinejason.divinemarketplace.auction.service;
 
+
+/*
+ * File role: Contains marketplace service logic for market recalculation service.
+ */
 import divinejason.divinemarketplace.config.ConfigService;
 import divinejason.divinemarketplace.setup.MarketRuntimeStateStore;
 import org.bukkit.Bukkit;

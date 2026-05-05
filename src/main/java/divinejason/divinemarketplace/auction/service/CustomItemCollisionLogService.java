@@ -1,5 +1,9 @@
 package divinejason.divinemarketplace.auction.service;
 
+
+/*
+ * File role: Contains marketplace service logic for custom item collision log service.
+ */
 import divinejason.divinemarketplace.auction.model.CustomItemDefinition;
 
 import java.io.IOException;

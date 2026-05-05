@@ -1,5 +1,9 @@
 package divinejason.divinemarketplace.auction.model;
 
+
+/*
+ * File role: Carries immutable unknown custom item record data between marketplace services, persistence stores, commands, and GUI rendering.
+ */
 import java.time.Instant;
 
 import org.bukkit.Material;
@@ -9,7 +13,7 @@ import org.bukkit.Material;
  *
  * Locked admin-review policy:
  * - all newly discovered custom items should be flagged for review so admins
- *   can categorize them more easily later
+ *   have enough context to categorize them from readable logs and admin commands
  * - safe new items are NORMAL review and may still be FULLY_SORTED, typically in
  *   category "unsorted"
  * - unsafe/ambiguous items are HIGH_PRIORITY and should become RECENT_ONLY while

@@ -1,5 +1,9 @@
 package divinejason.divinemarketplace.command;
 
+
+/*
+ * File role: Handles player-facing market history command subcommands and translates service results into chat/GUI feedback.
+ */
 import divinejason.divinemarketplace.auction.model.RecommendationHistoryPoint;
 import divinejason.divinemarketplace.auction.model.SaleRecord;
 import divinejason.divinemarketplace.menu.MenuSession;

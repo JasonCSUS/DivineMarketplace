@@ -1,5 +1,9 @@
 package divinejason.divinemarketplace.menu;
 
+
+/*
+ * File role: Adapts marketplace services into page-shaped data that the renderer can consume without business logic.
+ */
 import divinejason.divinemarketplace.auction.model.CategorySummary;
 import divinejason.divinemarketplace.auction.model.EnchantBrowseGroup;
 import divinejason.divinemarketplace.auction.model.EnchantBrowseSummary;

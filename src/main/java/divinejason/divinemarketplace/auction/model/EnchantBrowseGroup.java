@@ -1,5 +1,9 @@
 package divinejason.divinemarketplace.auction.model;
 
+
+/*
+ * File role: Enumerates enchant browse group values used by marketplace services, persistence, commands, and GUI rendering.
+ */
 import java.util.Locale;
 
 /**

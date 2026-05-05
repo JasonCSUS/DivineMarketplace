@@ -1,3 +1,5 @@
+# Default membership list for the functional blocks category.
+# Copied to plugins/DivineMarketplace/categories/ on first install; server edits are preserved on reload.
 categoryId: functional_blocks
 items:
   - CRAFTING_TABLE

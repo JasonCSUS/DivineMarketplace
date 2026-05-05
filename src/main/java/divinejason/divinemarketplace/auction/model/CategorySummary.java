@@ -1,5 +1,9 @@
 package divinejason.divinemarketplace.auction.model;
 
+
+/*
+ * File role: Carries immutable category summary data between marketplace services, persistence stores, commands, and GUI rendering.
+ */
 /**
  * Runtime top-level category summary.
  *

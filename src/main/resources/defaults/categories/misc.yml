@@ -1,3 +1,5 @@
+# Default membership list for the misc category.
+# Copied to plugins/DivineMarketplace/categories/ on first install; server edits are preserved on reload.
 categoryId: misc
 items:
   - MUSIC_DISC_13

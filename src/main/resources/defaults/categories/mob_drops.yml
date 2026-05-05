@@ -1,3 +1,5 @@
+# Default membership list for the mob drops category.
+# Copied to plugins/DivineMarketplace/categories/ on first install; server edits are preserved on reload.
 categoryId: mob_drops
 items:
   - ROTTEN_FLESH

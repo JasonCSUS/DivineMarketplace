@@ -1,3 +1,5 @@
+# Default membership list for the cut blocks category.
+# Copied to plugins/DivineMarketplace/categories/ on first install; server edits are preserved on reload.
 categoryId: cut_blocks
 items:
   - STONE_BRICKS

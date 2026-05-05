@@ -1,8 +1,13 @@
 package divinejason.divinemarketplace.auction.persistence.sqlite;
 
+
+/*
+ * File role: Persists and queries admin sales records in SQLite while exposing size/retention helpers where needed.
+ */
 import divinejason.divinemarketplace.auction.model.AdminTransactionRecord;
 import divinejason.divinemarketplace.auction.model.AdminTransactionType;
 import divinejason.divinemarketplace.auction.persistence.sqlite.SQLiteRecordCodecSupport;
+import divinejason.divinemarketplace.config.ConfigService;
 import divinejason.divinemarketplace.storage.sqlite.SQLiteStore;
 
 import java.sql.SQLException;
@@ -87,12 +92,61 @@ public final class SQLiteAdminSalesStore {
     }
 
     /**
-     * SQLite migration note:
-     * - per-file max-size purging no longer maps cleanly to shared DB storage
-     * - this is intentionally a no-op for now
+     * Trims this admin history table using the configured logical byte limit.
+     * The limit applies to this table's encoded payload, not the entire shared
+     * SQLite database file, so each admin history stream keeps its own budget.
+     *
+     * @return number of admin records removed from SQLite and the in-memory cache
      */
-    public void purgeOldestIfOverMaxSize() {
-        // no-op during SQLite migration
+    public int purgeOldestIfOverMaxSize() {
+        return purgeOldestUntilUnderBytes(ConfigService.get().adminSalesHistoryMaxBytes());
+    }
+
+    public int purgeOldestUntilUnderBytes(long maxBytes) {
+        if (maxBytes <= 0L) {
+            return 0;
+        }
+
+        synchronized (lock) {
+            try {
+                long currentBytes = sqliteStore.tablePayloadSizeBytes(TABLE);
+                if (currentBytes <= maxBytes) {
+                    return 0;
+                }
+
+                int deleted = 0;
+                List<Map.Entry<String, AdminTransactionRecord>> oldest = cacheById.entrySet().stream()
+                        .sorted(Comparator.comparingLong(entry -> entry.getValue().timestampEpochMillis()))
+                        .toList();
+
+                for (Map.Entry<String, AdminTransactionRecord> entry : oldest) {
+                    String encoded = encode(entry.getValue());
+                    if (sqliteStore.delete(TABLE, entry.getKey())) {
+                        cacheById.remove(entry.getKey());
+                        currentBytes -= estimatedPayloadBytes(entry.getKey(), encoded);
+                        deleted++;
+                    }
+                    if (currentBytes <= maxBytes) {
+                        break;
+                    }
+                }
+                return deleted;
+            } catch (SQLException exception) {
+                throw new IllegalStateException("Failed to purge old admin history from SQLite table: " + TABLE, exception);
+            }
+        }
+    }
+
+    public long estimatedPayloadBytes() {
+        try {
+            return sqliteStore.tablePayloadSizeBytes(TABLE);
+        } catch (SQLException exception) {
+            throw new IllegalStateException("Failed to estimate admin-history table size: " + TABLE, exception);
+        }
+    }
+
+    private long estimatedPayloadBytes(String id, String encodedValue) {
+        return Math.max(0, id.length()) + Math.max(0, encodedValue.length()) + 8L;
     }
 
     private List<AdminTransactionRecord> page(List<AdminTransactionRecord> input, int page, int pageSize) {

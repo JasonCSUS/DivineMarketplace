@@ -1,5 +1,9 @@
 package divinejason.divinemarketplace.auction.service;
 
+
+/*
+ * File role: Defines the service contract for enchantment metadata service so command, GUI, and runtime code share one behavior boundary.
+ */
 import divinejason.divinemarketplace.auction.model.EnchantmentDefinition;
 
 /**

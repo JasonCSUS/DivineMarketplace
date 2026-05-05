@@ -1,5 +1,9 @@
 package divinejason.divinemarketplace.prompt;
 
+
+/*
+ * File role: Manages short-lived per-player chat prompts for search, listing, and relisting, then returns players to the correct GUI state.
+ */
 import divinejason.divinemarketplace.auction.model.ItemClaimRecord;
 import divinejason.divinemarketplace.auction.model.ListingCreateResult;
 import divinejason.divinemarketplace.auction.service.ClaimService;

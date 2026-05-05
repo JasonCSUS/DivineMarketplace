@@ -1,5 +1,9 @@
 package divinejason.divinemarketplace.auction.model;
 
+
+/*
+ * File role: Carries immutable claim money result data between marketplace services, persistence stores, commands, and GUI rendering.
+ */
 /**
  * Result object for Vault-backed seller earnings payout.
  *

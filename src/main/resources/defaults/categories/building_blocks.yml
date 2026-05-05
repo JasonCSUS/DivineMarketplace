@@ -1,3 +1,5 @@
+# Default membership list for the building blocks category.
+# Copied to plugins/DivineMarketplace/categories/ on first install; server edits are preserved on reload.
 categoryId: building_blocks
 items:
   - STONE

@@ -1,5 +1,9 @@
 package divinejason.divinemarketplace.auction.service;
 
+
+/*
+ * File role: Calculates market profile values from observed market history.
+ */
 import divinejason.divinemarketplace.auction.model.Listing;
 import divinejason.divinemarketplace.auction.model.MarketProfile;
 import divinejason.divinemarketplace.auction.model.SaleRecord;

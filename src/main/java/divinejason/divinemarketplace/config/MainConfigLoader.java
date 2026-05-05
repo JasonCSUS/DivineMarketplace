@@ -1,5 +1,9 @@
 package divinejason.divinemarketplace.config;
 
+
+/*
+ * File role: Loads main config values from YAML and applies defaults/clamps before services read them.
+ */
 import divinejason.divinemarketplace.auction.model.SortMode;
 import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.configuration.file.YamlConfiguration;

@@ -1,5 +1,9 @@
 package divinejason.divinemarketplace.auction.service;
 
+
+/*
+ * File role: Implements purchase service behavior using the SQLite stores, config registries, and item identity services.
+ */
 import divinejason.divinemarketplace.auction.model.AdminTransactionRecord;
 import divinejason.divinemarketplace.auction.model.AdminTransactionType;
 import divinejason.divinemarketplace.auction.model.ItemClaimRecord;
@@ -27,7 +31,7 @@ import java.util.logging.Logger;
  *
  * Purchase delivery policy:
  * - bought items always move into the buyer's item-claim storage
- * - GUI claim screens deliver items later, in safe inventory-sized chunks
+ * - GUI claim screens deliver purchased items from claims in safe inventory-sized chunks
  * - direct inventory insertion is intentionally not part of purchase rollback
  */
 public final class DefaultPurchaseService implements PurchaseService {

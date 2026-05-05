@@ -1,5 +1,9 @@
 package divinejason.divinemarketplace.auction.model;
 
+
+/*
+ * File role: Enumerates browse visibility values used by marketplace services, persistence, commands, and GUI rendering.
+ */
 /**
  * Controls where a listing/group may appear in player-facing browsing.
  *

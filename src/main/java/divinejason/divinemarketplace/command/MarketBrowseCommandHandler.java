@@ -1,5 +1,9 @@
 package divinejason.divinemarketplace.command;
 
+
+/*
+ * File role: Handles player-facing market browse command subcommands and translates service results into chat/GUI feedback.
+ */
 import divinejason.divinemarketplace.auction.model.EnchantBrowseGroup;
 import divinejason.divinemarketplace.menu.MenuSession;
 import divinejason.divinemarketplace.menu.MenuView;

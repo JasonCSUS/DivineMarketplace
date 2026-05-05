@@ -1,5 +1,9 @@
 package divinejason.divinemarketplace.auction.service;
 
+
+/*
+ * File role: Defines the service contract for listing service so command, GUI, and runtime code share one behavior boundary.
+ */
 import divinejason.divinemarketplace.auction.model.ListingCreateResult;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;

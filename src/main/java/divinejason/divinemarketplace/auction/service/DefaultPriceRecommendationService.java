@@ -1,5 +1,9 @@
 package divinejason.divinemarketplace.auction.service;
 
+
+/*
+ * File role: Implements price recommendation service behavior using the SQLite stores, config registries, and item identity services.
+ */
 import divinejason.divinemarketplace.auction.model.Listing;
 import divinejason.divinemarketplace.auction.model.MarketProfile;
 import divinejason.divinemarketplace.auction.persistence.sqlite.SQLiteMarketPriceStore;

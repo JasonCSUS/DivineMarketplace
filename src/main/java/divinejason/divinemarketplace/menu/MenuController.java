@@ -1,5 +1,9 @@
 package divinejason.divinemarketplace.menu;
 
+
+/*
+ * File role: Owns GUI opening/reopening, navigation-stack updates, and the current renderer instance used by commands and prompts.
+ */
 import org.bukkit.entity.Player;
 
 /**

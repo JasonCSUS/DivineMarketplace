@@ -1,5 +1,9 @@
 package divinejason.divinemarketplace.menu;
 
+
+/*
+ * File role: Tags marketplace inventories so the listener can distinguish plugin menus from normal player inventories.
+ */
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.InventoryHolder;
 

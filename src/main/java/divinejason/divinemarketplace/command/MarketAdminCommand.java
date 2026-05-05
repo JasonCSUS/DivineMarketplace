@@ -1,5 +1,9 @@
 package divinejason.divinemarketplace.command;
 
+
+/*
+ * File role: Handles the market admin command subcommand group and keeps its permission checks, parsing, and output in one file.
+ */
 import divinejason.divinemarketplace.DivineMarketplace;
 import divinejason.divinemarketplace.auction.persistence.sqlite.SQLiteCustomEnchantStore;
 import divinejason.divinemarketplace.auction.persistence.sqlite.SQLiteCustomItemOverrideStore;
@@ -71,7 +75,8 @@ public final class MarketAdminCommand {
                 new MarketEnchantAdminCommand(context),
                 new MarketInspectAdminCommand(context),
                 new MarketCustomOverrideAdminCommand(context),
-                new MarketReviewAdminCommand(context)
+                new MarketReviewAdminCommand(context),
+                new MarketStorageAdminCommand(context)
         );
     }
 

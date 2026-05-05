@@ -1,5 +1,9 @@
 package divinejason.divinemarketplace.auction.model;
 
+
+/*
+ * File role: Enumerates recommendation strategy values used by marketplace services, persistence, commands, and GUI rendering.
+ */
 /**
  * How the UI should obtain a displayed recommendation for a listing/item.
  */

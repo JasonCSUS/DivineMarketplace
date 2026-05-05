@@ -1,5 +1,9 @@
 package divinejason.divinemarketplace.menu;
 
+
+/*
+ * File role: Stores the compact click payload attached to a rendered GUI slot; live data is re-fetched before mutations.
+ */
 import java.util.UUID;
 
 /**

@@ -1,5 +1,9 @@
 package divinejason.divinemarketplace.auction.service;
 
+
+/*
+ * File role: Implements item identity resolver behavior using the SQLite stores, config registries, and item identity services.
+ */
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;

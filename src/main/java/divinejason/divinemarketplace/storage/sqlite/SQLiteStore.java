@@ -1,8 +1,13 @@
 package divinejason.divinemarketplace.storage.sqlite;
 
+
+/*
+ * File role: Base type for SQLite-backed stores that need access to the shared database wrapper.
+ */
 import java.sql.*;
 import java.io.IOException;
 import java.nio.file.Files;
+import java.nio.file.Path;
 import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
@@ -262,12 +267,63 @@ public final class SQLiteStore {
     }
 
 
-    public long databaseFileSizeBytes() {
-        try {
-            return Files.exists(database.getFile()) ? Files.size(database.getFile()) : 0L;
-        } catch (IOException exception) {
-            throw new IllegalStateException("Failed to read SQLite database file size.", exception);
+    /**
+     * Returns the logical payload size for one namespaced table. This is not
+     * intended to match SQLite's page allocation exactly; it is the per-table
+     * pressure signal used by retention cleanup after moving away from one file
+     * per history bucket.
+     */
+    public long tablePayloadSizeBytes(String tableName) throws SQLException {
+        String table = qualifiedTable(tableName);
+        ensureTable(tableName);
+
+        String sql = "SELECT COALESCE(SUM(LENGTH(id) + LENGTH(value) + 8), 0) AS bytes FROM " + table + ";";
+        try (Connection conn = connection(); PreparedStatement st = conn.prepareStatement(sql); ResultSet rs = st.executeQuery()) {
+            return rs.next() ? Math.max(0L, rs.getLong("bytes")) : 0L;
         }
+    }
+
+    /**
+     * Tracks total on-disk SQLite usage, including WAL/SHM sidecar files. WAL
+     * mode can put most recent writes in market.db-wal, so checking only the main
+     * database file under-reports storage pressure.
+     */
+    public long databaseStorageSizeBytes() {
+        return fileSize(database.getFile())
+                + fileSize(sidecar("-wal"))
+                + fileSize(sidecar("-shm"));
+    }
+
+    /**
+     * Backwards-compatible name kept for older callers. It now returns aggregate
+     * SQLite storage, not just the main database file.
+     */
+    public long databaseFileSizeBytes() {
+        return databaseStorageSizeBytes();
+    }
+
+    /**
+     * Reclaims SQLite pages after retention cleanup. The WAL checkpoint truncates
+     * the sidecar log; VACUUM then rebuilds the database file so deleted rows stop
+     * consuming pages on disk. This should only run after cleanup deleted records.
+     */
+    public void checkpointAndVacuum() throws SQLException {
+        try (Connection conn = connection(); Statement st = conn.createStatement()) {
+            st.execute("PRAGMA wal_checkpoint(TRUNCATE);");
+            st.execute("VACUUM;");
+        }
+    }
+
+    private long fileSize(Path file) {
+        try {
+            return Files.exists(file) ? Files.size(file) : 0L;
+        } catch (IOException exception) {
+            throw new IllegalStateException("Failed to read SQLite storage file size: " + file, exception);
+        }
+    }
+
+    private Path sidecar(String suffix) {
+        return database.getFile().resolveSibling(database.getFile().getFileName().toString() + suffix);
     }
 
     private Connection connection() throws SQLException {

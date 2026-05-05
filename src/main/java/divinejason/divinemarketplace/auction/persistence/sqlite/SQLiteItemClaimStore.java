@@ -1,5 +1,9 @@
 package divinejason.divinemarketplace.auction.persistence.sqlite;
 
+
+/*
+ * File role: Persists and queries item claim records in SQLite while exposing size/retention helpers where needed.
+ */
 import divinejason.divinemarketplace.auction.model.ItemClaimRecord;
 import divinejason.divinemarketplace.auction.persistence.sqlite.SQLiteRecordCodecSupport;
 import divinejason.divinemarketplace.config.ConfigService;
@@ -150,6 +154,15 @@ public final class SQLiteItemClaimStore {
                 deleted++;
             }
             return deleted;
+        }
+    }
+
+
+    public long estimatedPayloadBytes() {
+        try {
+            return sqliteStore.tablePayloadSizeBytes(TABLE);
+        } catch (SQLException exception) {
+            throw new IllegalStateException("Failed to estimate item-claim table size.", exception);
         }
     }
 

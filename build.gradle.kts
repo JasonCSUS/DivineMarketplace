@@ -1,3 +1,4 @@
+// Builds the Paper plugin jar and declares compile/runtime dependencies.
 plugins {
     java
 }
@@ -23,8 +24,8 @@ dependencies {
     }
     implementation("org.xerial:sqlite-jdbc:3.45.3.0")
     implementation("com.zaxxer:HikariCP:5.1.0")
-    // TODO: add compileOnly dependencies for ItemsAdder / IceStorm when the exact
-    // API artifacts used by the server are confirmed.
+    // Optional integration APIs such as ItemsAdder should be added as compileOnly
+    // dependencies only when their exact server-side artifact coordinates are known.
 }
 
 java {

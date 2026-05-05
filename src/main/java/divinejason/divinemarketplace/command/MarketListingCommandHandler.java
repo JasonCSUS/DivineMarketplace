@@ -1,5 +1,9 @@
 package divinejason.divinemarketplace.command;
 
+
+/*
+ * File role: Handles player-facing market listing command subcommands and translates service results into chat/GUI feedback.
+ */
 import divinejason.divinemarketplace.auction.model.ListingCreateResult;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;

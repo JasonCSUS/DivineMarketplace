@@ -1,3 +1,5 @@
+# Default membership list for the wood blocks category.
+# Copied to plugins/DivineMarketplace/categories/ on first install; server edits are preserved on reload.
 categoryId: wood_blocks
 items:
   - OAK_LOG

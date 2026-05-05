@@ -1,5 +1,9 @@
 package divinejason.divinemarketplace.auction.service;
 
+
+/*
+ * File role: Contains marketplace service logic for flattened market index service.
+ */
 import divinejason.divinemarketplace.auction.model.CategoryDefinition;
 import divinejason.divinemarketplace.auction.model.CustomItemDefinition;
 import divinejason.divinemarketplace.auction.model.CustomItemDefinitionState;

@@ -1,5 +1,9 @@
 package divinejason.divinemarketplace.auction.service;
 
+
+/*
+ * File role: Contains marketplace service logic for custom item metadata log service.
+ */
 import divinejason.divinemarketplace.auction.model.CustomItemTypeExtractionResult;
 import divinejason.divinemarketplace.config.ConfigService;
 import org.bukkit.inventory.ItemStack;

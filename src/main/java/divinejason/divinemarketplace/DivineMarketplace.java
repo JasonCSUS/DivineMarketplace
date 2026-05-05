@@ -1,5 +1,9 @@
 package divinejason.divinemarketplace;
 
+
+/*
+ * File role: Bootstraps the Paper plugin, constructs shared services, registers commands/listeners, and owns reload/shutdown cleanup.
+ */
 import divinejason.divinemarketplace.auction.persistence.sqlite.SQLiteAdminClaimsStore;
 import divinejason.divinemarketplace.auction.persistence.sqlite.SQLiteAdminListingsStore;
 import divinejason.divinemarketplace.auction.persistence.sqlite.SQLiteAdminSalesStore;
@@ -31,10 +35,29 @@ import org.bukkit.plugin.RegisteredServiceProvider;
 import org.bukkit.plugin.java.JavaPlugin;
 
 import java.nio.file.Path;
+import java.sql.SQLException;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
 public final class DivineMarketplace extends JavaPlugin {
+    /**
+     * Snapshot returned by manual and scheduled SQLite maintenance. Counts are
+     * record removals; byte values include the main database plus WAL/SHM files.
+     */
+    public record SQLiteStorageMaintenanceResult(
+            long beforeBytes,
+            long afterBytes,
+            int purgedSales,
+            int purgedAdminSales,
+            int purgedAdminListings,
+            int purgedAdminClaims,
+            int purgedItemClaims
+    ) {
+        public int totalPurged() {
+            return purgedSales + purgedAdminSales + purgedAdminListings + purgedAdminClaims + purgedItemClaims;
+        }
+    }
+
     private PluginFileInitializer fileInitializer;
     private MainConfigLoader mainConfigLoader;
     private MainConfig mainConfig;
@@ -105,7 +128,7 @@ public final class DivineMarketplace extends JavaPlugin {
             marketRecalculationService.scheduleStartupAndDailyChecks();
             scheduleHourlyListingExpiration();
             scheduleListingWriteFlush();
-            scheduleItemClaimSoftLimitCleanup();
+            scheduleSQLiteStorageMaintenance();
             logStartupSummary(logger);
             logger.info("DivineMarketplace enabled.");
         } catch (Exception exception) {
@@ -281,36 +304,83 @@ public final class DivineMarketplace extends JavaPlugin {
         }, fiveSecondsTicks, fiveSecondsTicks);
     }
 
-    private void scheduleItemClaimSoftLimitCleanup() {
+    private void scheduleSQLiteStorageMaintenance() {
         long fiveMinutesTicks = 20L * 60L * 5L;
         long thirtyMinutesTicks = 20L * 60L * 30L;
         getServer().getScheduler().runTaskTimer(this, () -> {
             try {
-                long softMaxBytes = ConfigService.get().itemClaimsSoftMaxBytes();
-                if (softMaxBytes <= 0L) {
-                    return;
-                }
-
-                long databaseBytes = sqliteStore.databaseFileSizeBytes();
-                if (databaseBytes < softMaxBytes) {
-                    return;
-                }
-
-                int deletedClaims = itemClaimStore.purgeOldestAbandonedClaims(System.currentTimeMillis());
-                if (deletedClaims <= 0) {
-                    warnAdminsAboutItemClaimStorage(databaseBytes, softMaxBytes);
-                } else {
-                    getLogger().info("Item-claim storage cleanup removed " + deletedClaims + " abandoned claim(s).");
-                }
+                runSQLiteStorageMaintenance();
             } catch (RuntimeException exception) {
-                getLogger().warning("Item-claim storage cleanup check failed: " + exception.getMessage());
+                getLogger().warning("SQLite storage maintenance failed: " + exception.getMessage());
             }
         }, fiveMinutesTicks, thirtyMinutesTicks);
     }
 
-    private void warnAdminsAboutItemClaimStorage(long databaseBytes, long softMaxBytes) {
+    public SQLiteStorageMaintenanceResult runSQLiteStorageMaintenance() {
+        long beforeBytes = sqliteStore.databaseStorageSizeBytes();
+        int purgedSales = salesStore.purgeOldestIfOverMaxSize();
+        int purgedAdminSales = adminSalesStore.purgeOldestIfOverMaxSize();
+        int purgedAdminListings = adminListingsStore.purgeOldestIfOverMaxSize();
+        int purgedAdminClaims = adminClaimsStore.purgeOldestIfOverMaxSize();
+        int purgedItemClaims = purgeAbandonedItemClaimsIfStoragePressure();
+
+        if (purgedSales > 0) {
+            saleHistoryIndex.reload();
+        }
+
+        int totalPurged = purgedSales + purgedAdminSales + purgedAdminListings + purgedAdminClaims + purgedItemClaims;
+        if (totalPurged > 0) {
+            compactSQLiteAfterCleanup();
+        }
+
+        long afterBytes = sqliteStore.databaseStorageSizeBytes();
+        SQLiteStorageMaintenanceResult result = new SQLiteStorageMaintenanceResult(
+                beforeBytes,
+                afterBytes,
+                purgedSales,
+                purgedAdminSales,
+                purgedAdminListings,
+                purgedAdminClaims,
+                purgedItemClaims
+        );
+
+        if (totalPurged > 0) {
+            getLogger().info("SQLite storage maintenance removed " + totalPurged + " old record(s). "
+                    + "sales=" + purgedSales
+                    + ", admin_sales=" + purgedAdminSales
+                    + ", admin_listings=" + purgedAdminListings
+                    + ", admin_claims=" + purgedAdminClaims
+                    + ", abandoned_item_claims=" + purgedItemClaims
+                    + ", storage=" + beforeBytes + " -> " + afterBytes + " bytes.");
+        }
+        return result;
+    }
+
+    private int purgeAbandonedItemClaimsIfStoragePressure() {
+        long softMaxBytes = ConfigService.get().itemClaimsSoftMaxBytes();
+        long itemClaimBytes = getItemClaimPayloadBytes();
+        if (softMaxBytes <= 0L || itemClaimBytes < softMaxBytes) {
+            return 0;
+        }
+
+        int deletedClaims = itemClaimStore.purgeOldestAbandonedClaims(System.currentTimeMillis());
+        if (deletedClaims <= 0) {
+            warnAdminsAboutItemClaimStorage(itemClaimBytes, softMaxBytes);
+        }
+        return deletedClaims;
+    }
+
+    private void compactSQLiteAfterCleanup() {
+        try {
+            sqliteStore.checkpointAndVacuum();
+        } catch (SQLException exception) {
+            getLogger().warning("SQLite cleanup removed rows but compaction failed: " + exception.getMessage());
+        }
+    }
+
+    private void warnAdminsAboutItemClaimStorage(long itemClaimBytes, long softMaxBytes) {
         String plain = "DivineMarketplace item-claim storage is above the soft limit and no abandoned claims were removed. Ask players to empty claim storage or raise storage.limits.itemClaimsSoftMaxMb.";
-        getLogger().warning(plain + " Current database size: " + databaseBytes + " bytes; soft limit: " + softMaxBytes + " bytes.");
+        getLogger().warning(plain + " Current item-claim payload: " + itemClaimBytes + " bytes; soft limit: " + softMaxBytes + " bytes.");
 
         String richMessage = "<yellow>DivineMarketplace item-claim storage is above the soft limit.</yellow> "
                 + "<gray>No abandoned claims were available for cleanup. Ask players to empty claim storage or raise "
@@ -322,11 +392,36 @@ public final class DivineMarketplace extends JavaPlugin {
         }
     }
 
+    public long getSQLiteStorageBytes() {
+        return sqliteStore.databaseStorageSizeBytes();
+    }
+
+    public long getSalesHistoryPayloadBytes() {
+        return salesStore.estimatedPayloadBytes();
+    }
+
+    public long getAdminSalesHistoryPayloadBytes() {
+        return adminSalesStore.estimatedPayloadBytes();
+    }
+
+    public long getAdminListingsHistoryPayloadBytes() {
+        return adminListingsStore.estimatedPayloadBytes();
+    }
+
+    public long getAdminClaimsHistoryPayloadBytes() {
+        return adminClaimsStore.estimatedPayloadBytes();
+    }
+
+    public long getItemClaimPayloadBytes() {
+        return itemClaimStore.estimatedPayloadBytes();
+    }
+
     private void logStartupSummary(Logger logger) {
         Path dataFolder = getDataFolder().toPath();
         logger.info(() -> "Data folder: " + dataFolder.toAbsolutePath());
         logger.info(() -> "config.yml: " + dataFolder.resolve(PluginDirectoryLayout.CONFIG_YML).toAbsolutePath());
         logger.info(() -> "market.db: " + dataFolder.resolve(ConfigService.get().sqliteFile()).toAbsolutePath());
+        logger.info(() -> "SQLite storage size: " + getSQLiteStorageBytes() + " bytes");
         logger.info(() -> "Runtime tables: market_index, market_prices, price_history, listings, item_claims, money_claims, sales, admin_sales, admin_listings, admin_claims, runtime_state, custom_enchants, custom_item_overrides");
         logger.info(() -> "Default listing duration days: " + mainConfig.listingPolicies().defaults().listingDurationDays());
         logger.info(() -> "Default max active listings: " + mainConfig.listingPolicies().defaults().maxListings());

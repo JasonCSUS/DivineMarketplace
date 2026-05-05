@@ -15,7 +15,7 @@ Current implementation baseline (May 2026)
 Purpose:
 - create missing plugin folders and defaults on first startup
 - preserve existing runtime database state
-- copy readable admin helper files such as `permissions.txt` from bundled defaults
+- generate readable admin helper files such as `permissions.txt`
 
 Current behavior:
 - `PluginFileInitializer` creates the live folder layout and copies missing bundled defaults
@@ -46,8 +46,11 @@ Current SQLite tables:
 
 Rules:
 - active listings are not size-purged as cache data; they are live market state
-- claim cleanup is based on SQLite database pressure and abandoned claim age
-- admin history and recent player-facing sales history may be FIFO-purged by configured limits
+- SQLite storage tracking includes the main database file plus WAL/SHM sidecar files
+- history table retention uses per-table logical payload size so shared SQLite storage still honors the configured history MB limits
+- item claim cleanup uses the `item_claims` table payload size and abandoned claim age; it does not delete active/unexpired claims just because the total SQLite database is large
+- retention cleanup checkpoints/truncates WAL and runs VACUUM after rows are deleted so old data can actually release disk pages
+- `/market storage` shows current storage usage; `/market storage cleanup` runs the retention pass immediately
 - write flows that touch multiple stores should use rollback helpers where practical
 
 3. Item identity and definitions
@@ -142,7 +145,7 @@ Purpose:
 
 Current behavior:
 - `/market` opens the main GUI
-- `/market all`, `/market <category>`, and `/market search <query>` open the equivalent paginated GUI views instead of printing first-page-only chat lists
+- `/market all`, `/market search <query>`, `/market list <quantity> <unitPrice>`, `/market pricecheck`, `/market history`, and `/market pricehistory` remain command paths
 - GUI search, listing, and relisting use short-lived per-player chat prompts because inventory GUIs are poor text/price-entry surfaces
 - prompt state is separate from menu sessions and keyed by player UUID
 - menu sessions/actions are also keyed by player UUID, keeping simultaneous players isolated
@@ -154,20 +157,20 @@ Current behavior:
 9. Commands
 -----------
 Player-facing:
-- `/market` opens the main GUI
-- `/market all` opens the all-listings GUI
-- `/market <category>` opens that category GUI
-- `/market enchanted_books [group]` opens the enchanted-book category/group GUI
-- `/market search [query]` opens a chat search prompt or direct search-results GUI
-- `/market list [quantity unitPrice]` starts chat listing or uses the exact direct numeric command path
-- `/market pricecheck` or `/market pc` prints a held-item recommendation
-- `/market claim` opens the claims GUI
-- `/market claim earnings` claims seller earnings directly
-- `/market history <display name> [menu]` prints recent sale history or opens the sale-history GUI
-- `/market pricehistory <display name> [menu]` prints latest-month recommendation history or opens the price-history GUI
+- `/market`
+- `/market all`
+- `/market <category>`
+- `/market search [query]`
+- `/market list [quantity unitPrice]`
+- `/market pricecheck` or `/market pc`
+- `/market claim`
+- `/market claim earnings`
+- `/market history <display name>`
+- `/market pricehistory <display name> [menu]`
 
 Admin-facing:
 - admin commands remain behind focused handlers under `MarketAdminCommand`
+- `/market storage` shows SQLite/table storage pressure and `/market storage cleanup` runs retention cleanup
 - player suggestions should prefer display names
 - admin suggestions may expose market keys where maintenance needs exact ids
 
@@ -179,12 +182,24 @@ Done/current for alpha:
 - chat input for search/list/relist
 - pricecheck command for held-item recommendations
 - claim results with exact player feedback
-- browse/search commands route to paginated GUI states with useful back-stack context
-- sale-history and price-history GUI paths from item detail and command `menu` shortcuts, with data-aware price-history month navigation
+- price-history GUI path from item detail and `/market pricehistory <item> menu`, with data-aware month navigation
 - component-aware enchanted-book sale history
 
 Known follow-up scans before hands-on server testing:
 - inspect command output for any remaining internal market-key leaks to normal players
-- check all admin placeholders and decide whether they are acceptable for alpha or should be hidden
+- review admin command UX and decide which flows should remain command-only for alpha
 - manually verify `menu.yml` slot defaults after applying patches
-- keep `plugin.yml`, `defaults/permissions.txt`, and configured tier permission examples in sync
+- verify permissions in `plugin.yml` against `permissions.txt`, including `divinemarketplace.admin.storage`
+- local compile was reported successful by the project owner; continue to use real server startup logs for runtime validation
+
+
+11. Source comments and docs
+----------------------------
+Purpose:
+- keep source comments useful for maintenance instead of preserving old planning notes
+
+Current behavior:
+- Java source files include a file-role comment near the package declaration describing the file's runtime responsibility
+- source comments should describe current behavior; root docs should carry open planning work
+- root planning stays in `plan.txt` and `PROJECT_STRUCTURE_TODO.md`; source-side planning maps should stay absent
+- YAML defaults include short header comments explaining what server owners can safely edit

@@ -1,5 +1,9 @@
 package divinejason.divinemarketplace.auction.model;
 
+
+/*
+ * File role: Enumerates purchase failure reason values used by marketplace services, persistence, commands, and GUI rendering.
+ */
 /**
  * Stable purchase failure reasons for command/menu UX.
  */

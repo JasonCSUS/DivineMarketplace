@@ -1,5 +1,9 @@
 package divinejason.divinemarketplace.auction.service;
 
+
+/*
+ * File role: Extracts stored enchant signals from ItemStacks for identity and custom-item resolution.
+ */
 import io.papermc.paper.datacomponent.DataComponentTypes;
 import io.papermc.paper.datacomponent.item.ItemEnchantments;
 import org.bukkit.NamespacedKey;

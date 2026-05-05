@@ -1,5 +1,9 @@
 package divinejason.divinemarketplace.command;
 
+
+/*
+ * File role: Carries the dependencies needed by market admin command handlers so command code does not pull directly from the plugin singleton.
+ */
 import divinejason.divinemarketplace.DivineMarketplace;
 import divinejason.divinemarketplace.auction.model.AdminTransactionRecord;
 import divinejason.divinemarketplace.auction.persistence.sqlite.SQLiteCustomEnchantStore;

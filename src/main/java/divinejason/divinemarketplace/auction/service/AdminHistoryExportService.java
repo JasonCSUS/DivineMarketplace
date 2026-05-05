@@ -1,5 +1,9 @@
 package divinejason.divinemarketplace.auction.service;
 
+
+/*
+ * File role: Defines the service contract for admin history export service so command, GUI, and runtime code share one behavior boundary.
+ */
 import java.nio.file.Path;
 import java.util.UUID;
 

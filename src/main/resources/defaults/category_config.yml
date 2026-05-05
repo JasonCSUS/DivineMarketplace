@@ -1,3 +1,5 @@
+# Defines top-level category display names, GUI icons, and browse order.
+# Category ids remain internal tokens; displayName is what players should see.
 categories:
   building_blocks:
     displayName: "Building Blocks"

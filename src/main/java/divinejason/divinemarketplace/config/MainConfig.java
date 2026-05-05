@@ -1,5 +1,9 @@
 package divinejason.divinemarketplace.config;
 
+
+/*
+ * File role: Stores parsed main configuration values in an immutable object used by services and runtime maintenance.
+ */
 import divinejason.divinemarketplace.auction.model.SortMode;
 
 import java.util.List;

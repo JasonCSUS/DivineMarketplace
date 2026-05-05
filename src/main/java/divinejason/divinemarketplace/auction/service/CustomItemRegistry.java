@@ -1,5 +1,9 @@
 package divinejason.divinemarketplace.auction.service;
 
+
+/*
+ * File role: Defines the service contract for custom item registry so command, GUI, and runtime code share one behavior boundary.
+ */
 import divinejason.divinemarketplace.auction.model.CustomItemDefinition;
 import org.bukkit.Material;
 

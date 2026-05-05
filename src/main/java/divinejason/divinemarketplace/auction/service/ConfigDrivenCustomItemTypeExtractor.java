@@ -1,5 +1,9 @@
 package divinejason.divinemarketplace.auction.service;
 
+
+/*
+ * File role: Extracts config driven custom item type signals from ItemStacks for identity and custom-item resolution.
+ */
 import divinejason.divinemarketplace.auction.model.CustomItemOverrideRecord;
 import divinejason.divinemarketplace.auction.model.CustomItemTypeExtractionResult;
 import divinejason.divinemarketplace.auction.persistence.sqlite.SQLiteCustomItemOverrideStore;

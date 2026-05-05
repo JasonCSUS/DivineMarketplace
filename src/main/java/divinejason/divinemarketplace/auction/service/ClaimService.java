@@ -1,5 +1,9 @@
 package divinejason.divinemarketplace.auction.service;
 
+
+/*
+ * File role: Defines the service contract for claim service so command, GUI, and runtime code share one behavior boundary.
+ */
 import divinejason.divinemarketplace.auction.model.ClaimItemResult;
 import divinejason.divinemarketplace.auction.model.ClaimMoneyResult;
 import divinejason.divinemarketplace.auction.model.ListingCreateResult;

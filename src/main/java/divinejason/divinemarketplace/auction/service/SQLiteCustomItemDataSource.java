@@ -1,5 +1,9 @@
 package divinejason.divinemarketplace.auction.service;
 
+
+/*
+ * File role: Contains marketplace service logic for sqlite custom item data source.
+ */
 import divinejason.divinemarketplace.auction.model.CustomItemDefinition;
 import divinejason.divinemarketplace.auction.model.CustomItemDefinitionState;
 import divinejason.divinemarketplace.auction.model.FlattenedMarketIndexEntry;

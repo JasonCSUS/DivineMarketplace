@@ -1,5 +1,9 @@
 package divinejason.divinemarketplace.command;
 
+
+/*
+ * File role: Defines the command-handler contract for market admin command routing.
+ */
 import org.bukkit.command.CommandSender;
 
 import java.util.Collection;

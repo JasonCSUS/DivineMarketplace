@@ -1,5 +1,9 @@
 package divinejason.divinemarketplace.auction.model;
 
+
+/*
+ * File role: Enumerates pricing mode values used by marketplace services, persistence, commands, and GUI rendering.
+ */
 /**
  * Determines how pricing / recommendation logic should treat an item family.
  *

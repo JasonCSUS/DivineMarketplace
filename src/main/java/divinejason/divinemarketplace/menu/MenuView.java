@@ -1,5 +1,9 @@
 package divinejason.divinemarketplace.menu;
 
+
+/*
+ * File role: Lists the supported GUI screens that a MenuSession can render.
+ */
 /**
  * Locked v1 menu views.
  */

@@ -1,5 +1,9 @@
 package divinejason.divinemarketplace.auction.service;
 
+
+/*
+ * File role: Coordinates multi-step market writes with compensating rollback actions when a subsequent step fails.
+ */
 import java.util.ArrayDeque;
 import java.util.Deque;
 import java.util.Objects;
@@ -10,7 +14,7 @@ import java.util.logging.Logger;
  *
  * This is not a database transaction. It is a defensive coordinator for flows
  * that touch Vault, listing storage, claim storage, and audit records in one
- * operation. Each successful step can register a compensating action. If a later
+ * operation. Each successful step can register a compensating action. If a subsequent
  * step fails, rollback actions run in reverse order.
  */
 public final class MarketWriteTransaction {

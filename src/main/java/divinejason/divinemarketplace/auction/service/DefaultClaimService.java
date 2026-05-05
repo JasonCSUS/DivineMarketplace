@@ -1,5 +1,9 @@
 package divinejason.divinemarketplace.auction.service;
 
+
+/*
+ * File role: Implements claim service behavior using the SQLite stores, config registries, and item identity services.
+ */
 import divinejason.divinemarketplace.auction.model.AdminTransactionRecord;
 import divinejason.divinemarketplace.auction.model.AdminTransactionType;
 import divinejason.divinemarketplace.auction.model.ClaimItemResult;
@@ -216,7 +220,7 @@ public final class DefaultClaimService implements ClaimService {
     /**
      * Performs the durable reduction, admin-history write, and exact inventory
      * insertion for item claims. The claim store is updated before inventory
-     * insertion so rollback can restore the original durable claim if any later
+     * insertion so rollback can restore the original durable claim if a subsequent
      * step fails.
      */
     private ClaimItemResult deliverItemClaim(Player player, ItemClaimRecord claim, int deliverAmount, String reason) {

@@ -1,5 +1,9 @@
 package divinejason.divinemarketplace.auction.service;
 
+
+/*
+ * File role: Contains helper logic for listing write that is shared by services with similar inventory/storage rules.
+ */
 import divinejason.divinemarketplace.auction.model.Listing;
 import divinejason.divinemarketplace.auction.model.ListingCreateFailureReason;
 import divinejason.divinemarketplace.auction.model.ResolvedItemDefinition;

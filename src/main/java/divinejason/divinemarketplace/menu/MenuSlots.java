@@ -1,5 +1,9 @@
 package divinejason.divinemarketplace.menu;
 
+
+/*
+ * File role: Defines fallback GUI slot numbers used when menu.yml is missing or invalid.
+ */
 /**
  * Central slot constants so renderers and click routing stay aligned.
  *

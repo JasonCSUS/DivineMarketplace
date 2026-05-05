@@ -1,5 +1,9 @@
 package divinejason.divinemarketplace.auction.persistence.sqlite;
 
+
+/*
+ * File role: Persists and queries market index records in SQLite while exposing size/retention helpers where needed.
+ */
 import divinejason.divinemarketplace.auction.model.CustomItemDefinitionState;
 import divinejason.divinemarketplace.auction.model.FlattenedMarketIndexEntry;
 import divinejason.divinemarketplace.storage.sqlite.SQLiteStore;

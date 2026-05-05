@@ -1,5 +1,9 @@
 package divinejason.divinemarketplace.auction.model;
 
+
+/*
+ * File role: Enumerates item class values used by marketplace services, persistence, commands, and GUI rendering.
+ */
 /**
  * Broad routing classification used before resolving full market identity.
  *
@@ -16,7 +20,7 @@ package divinejason.divinemarketplace.auction.model;
  *   Weapons/armor/tools now go through DEFAULT and are handled inside the
  *   default resolution path.
  * - custom items are routed broadly as CUSTOM_DATA_ITEM first.
- *   Known vs unknown custom items are decided later inside ItemIdentityResolver.
+ *   Known vs unknown custom items are decided during ItemIdentityResolver resolution.
  */
 public enum ItemClass {
     CUSTOM_DATA_ITEM,

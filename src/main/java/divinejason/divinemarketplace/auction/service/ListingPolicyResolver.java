@@ -1,5 +1,9 @@
 package divinejason.divinemarketplace.auction.service;
 
+
+/*
+ * File role: Resolves listing policy decisions used by listing, browsing, and marketplace policy code.
+ */
 import divinejason.divinemarketplace.config.ConfigService;
 import org.bukkit.entity.Player;
 

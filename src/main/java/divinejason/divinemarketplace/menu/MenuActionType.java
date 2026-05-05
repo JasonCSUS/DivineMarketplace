@@ -1,5 +1,9 @@
 package divinejason.divinemarketplace.menu;
 
+
+/*
+ * File role: Enumerates click intents used by the menu router after a rendered inventory slot is clicked.
+ */
 /**
  * Stable click action ids captured at render time.
  *

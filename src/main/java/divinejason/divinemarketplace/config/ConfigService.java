@@ -1,5 +1,9 @@
 package divinejason.divinemarketplace.config;
 
+
+/*
+ * File role: Provides cached access to parsed plugin configuration values used across listing policy, storage, and cleanup code.
+ */
 import divinejason.divinemarketplace.auction.model.SortMode;
 
 import java.util.List;
@@ -22,7 +26,11 @@ public final class ConfigService {
     public int adminListingsHistoryMaxMb() { return getMainConfig().storage().limits().adminListingsHistoryMaxMb(); }
     public int adminClaimsHistoryMaxMb() { return getMainConfig().storage().limits().adminClaimsHistoryMaxMb(); }
     public int itemClaimsSoftMaxMb() { return getMainConfig().storage().limits().itemClaimsSoftMaxMb(); }
-    public long itemClaimsSoftMaxBytes() { return itemClaimsSoftMaxMb() * 1_048_576L; }
+    public long salesHistoryMaxBytes() { return mbToBytes(salesHistoryMaxMb()); }
+    public long adminSalesHistoryMaxBytes() { return mbToBytes(adminSalesHistoryMaxMb()); }
+    public long adminListingsHistoryMaxBytes() { return mbToBytes(adminListingsHistoryMaxMb()); }
+    public long adminClaimsHistoryMaxBytes() { return mbToBytes(adminClaimsHistoryMaxMb()); }
+    public long itemClaimsSoftMaxBytes() { return mbToBytes(itemClaimsSoftMaxMb()); }
     public int itemClaimMaxActiveClaims() { return getMainConfig().claims().maxActiveItemClaims(); }
     public long marketRecalcIntervalMillis() { return getMainConfig().market().recalcIntervalHours() * 3_600_000L; }
     public long marketProfileMinimumRecalcMillis() { return getMainConfig().market().perItemMinimumRecalcHours() * 3_600_000L; }
@@ -56,4 +64,8 @@ public final class ConfigService {
     public boolean writeInspectRawSnapshots() { return getMainConfig().customItemIdentity().metadataSnapshots().writeInspectRawSnapshots(); }
     public String metadataSnapshotDirectory() { return getMainConfig().customItemIdentity().metadataSnapshots().directory(); }
     public List<MainConfig.Rule> customIdentityRules() { return getMainConfig().customItemIdentity().rules(); }
+
+    private long mbToBytes(int megabytes) {
+        return Math.max(0L, megabytes) * 1_048_576L;
+    }
 }

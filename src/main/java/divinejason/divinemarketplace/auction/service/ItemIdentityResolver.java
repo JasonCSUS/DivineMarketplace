@@ -1,5 +1,9 @@
 package divinejason.divinemarketplace.auction.service;
 
+
+/*
+ * File role: Defines the service contract for item identity resolver so command, GUI, and runtime code share one behavior boundary.
+ */
 import org.bukkit.inventory.ItemStack;
 
 import divinejason.divinemarketplace.auction.model.ResolvedItemDefinition;

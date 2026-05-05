@@ -1,5 +1,9 @@
 package divinejason.divinemarketplace.storage.sqlite;
 
+
+/*
+ * File role: Wraps the shared SQLite connection, schema initialization, transactions, WAL maintenance, and file-size reporting.
+ */
 import java.nio.file.Path;
 import java.util.Locale;
 import java.util.Objects;

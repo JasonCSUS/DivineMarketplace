@@ -1,5 +1,9 @@
 package divinejason.divinemarketplace.auction.service;
 
+
+/*
+ * File role: Implements market analytics service behavior using the SQLite stores, config registries, and item identity services.
+ */
 import divinejason.divinemarketplace.auction.model.Listing;
 import divinejason.divinemarketplace.auction.model.SaleRecord;
 import divinejason.divinemarketplace.auction.persistence.sqlite.SQLiteSalesStore;
@@ -22,8 +26,12 @@ public final class DefaultMarketAnalyticsService implements MarketAnalyticsServi
     @Override
     public void recordSale(SaleRecord saleRecord) {
         salesStore.append(saleRecord);
-        salesStore.purgeOldestIfOverMaxSize();
-        historyIndex.recordSale(saleRecord);
+        int purged = salesStore.purgeOldestIfOverMaxSize();
+        if (purged > 0) {
+            historyIndex.reload();
+        } else {
+            historyIndex.recordSale(saleRecord);
+        }
     }
 
     @Override

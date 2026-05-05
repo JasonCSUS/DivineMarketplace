@@ -1,5 +1,9 @@
 package divinejason.divinemarketplace.listener;
 
+
+/*
+ * File role: Receives Bukkit player lifecycle events and clears per-player marketplace session/prompt state when a player disconnects.
+ */
 import divinejason.divinemarketplace.menu.MenuSessionManager;
 import divinejason.divinemarketplace.prompt.MarketChatPromptService;
 import org.bukkit.event.EventHandler;

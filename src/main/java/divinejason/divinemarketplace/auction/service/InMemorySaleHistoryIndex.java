@@ -1,5 +1,9 @@
 package divinejason.divinemarketplace.auction.service;
 
+
+/*
+ * File role: Maintains an in-memory read index for sale history index to keep player-facing history lookups fast.
+ */
 import divinejason.divinemarketplace.auction.model.SaleRecord;
 import divinejason.divinemarketplace.auction.persistence.sqlite.SQLiteSalesStore;
 

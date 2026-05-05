@@ -1,35 +1,33 @@
 DivineMarketplace permissions reference
 =======================================
 
-This file is copied to plugins/DivineMarketplace/permissions.txt on first startup.
-It is a server-owner reference for LuckPerms or another permission manager; it is
-not read back by the plugin at runtime.
+This file is copied from defaults/permissions.txt on first install.
+It is a readable helper for server owners; plugin.yml remains the Bukkit permission registration source.
 
 Built-in player permissions
 ---------------------------
 divinemarketplace.use
-  Basic player access to /market and the marketplace GUI.
+  Basic player access to the marketplace.
 
 divinemarketplace.claim
-  Allows opening claim views and claiming pending item/money claims.
+  Allows opening claims and claiming pending earnings/items.
 
 Built-in admin permissions
 --------------------------
 divinemarketplace.admin
-  Parent permission for full marketplace administration. The plugin.yml parent
-  grants the built-in admin child permissions below.
+  Parent permission for full marketplace administration.
 
 divinemarketplace.admin.reload
-  Reload config files, category data, custom definitions, and menu visuals.
+  Reload configs and rebuild cached runtime state.
 
 divinemarketplace.admin.recalc
-  Recalculate one market profile or all market profiles.
+  Recalculate one market key or all market profiles.
 
 divinemarketplace.admin.price.set
-  Manually set the current recommended price for a market entry.
+  Manually set the current recommended price for a market key.
 
 divinemarketplace.admin.listing.cancel
-  Cancel another player's listing from admin controls.
+  Cancel another player's listing.
 
 divinemarketplace.admin.history.view
   View admin history in-game.
@@ -38,7 +36,7 @@ divinemarketplace.admin.history.export
   Export admin history into readable text files.
 
 divinemarketplace.admin.item.sort
-  Move a market entry/category placement through admin sort commands.
+  Change category placement for an item or market group.
 
 divinemarketplace.admin.item.define
   Define/update held custom item metadata.
@@ -47,7 +45,7 @@ divinemarketplace.admin.enchant.define
   Define/update custom enchant metadata.
 
 divinemarketplace.admin.flagged.view
-  View flagged/review-needed custom item entries.
+  View flagged / review-needed items.
 
 divinemarketplace.admin.collisions.view
   View custom item collision log entries in-game.
@@ -58,25 +56,22 @@ divinemarketplace.admin.inspect
 divinemarketplace.admin.custom.override
   Mark held items as treat-as-vanilla or remove those overrides.
 
-Config-defined listing tier permissions
----------------------------------------
-Premium listing tier permissions are not hard-coded. They are read from
-config.yml under listingPolicies.tiers. The bundled default config currently
-ships these examples:
+divinemarketplace.admin.storage
+  View SQLite storage usage and run retention cleanup.
+
+Configured listing tier permissions
+-----------------------------------
+The plugin reads premium listing tier permissions from config.yml under listingPolicies.tiers.
+The default config ships with these examples:
 
 - divinemarketplace.tier.1
 - divinemarketplace.tier.2
 - divinemarketplace.tier.3
 
-The plugin uses the first/highest matching configured tier to decide:
+Each configured tier controls:
 - max active listings
 - listing duration
 
-If you change listingPolicies.tiers in config.yml, mirror those permission nodes
-in your LuckPerms setup and update this reference file for your staff.
-
-Maintenance reminder
---------------------
-When a new hard-coded built-in permission is added, update:
-- src/main/resources/plugin.yml
-- src/main/resources/defaults/permissions.txt
+Maintenance note
+----------------
+When adding a new hard-coded permission, update plugin.yml and this helper file.

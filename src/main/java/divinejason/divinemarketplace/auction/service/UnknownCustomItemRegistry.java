@@ -1,5 +1,9 @@
 package divinejason.divinemarketplace.auction.service;
 
+
+/*
+ * File role: Defines the service contract for unknown custom item registry so command, GUI, and runtime code share one behavior boundary.
+ */
 import divinejason.divinemarketplace.auction.model.UnknownCustomItemRecord;
 
 /**
@@ -7,7 +11,7 @@ import divinejason.divinemarketplace.auction.model.UnknownCustomItemRecord;
  *
  * Rules locked so far:
  * - all newly discovered custom items should be flagged for review so admins can
- *   sort them more easily later
+ *   sort them from readable logs and admin commands
  * - newly discovered but otherwise safe items should generally be NORMAL review
  * - ambiguous or system-risk items should be HIGH_PRIORITY review
  * - alerts should happen once per unique issue signature, not spam repeatedly

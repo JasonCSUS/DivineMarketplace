@@ -1,5 +1,9 @@
 package divinejason.divinemarketplace.auction.model;
 
+
+/*
+ * File role: Carries immutable custom item definition data between marketplace services, persistence stores, commands, and GUI rendering.
+ */
 import org.bukkit.Material;
 
 /**

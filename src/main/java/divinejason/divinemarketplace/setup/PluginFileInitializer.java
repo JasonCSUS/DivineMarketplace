@@ -1,5 +1,9 @@
 package divinejason.divinemarketplace.setup;
 
+
+/*
+ * File role: Creates missing plugin folders/default files on first install without overwriting server-owner edits.
+ */
 import org.bukkit.Material;
 import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.configuration.file.YamlConfiguration;
@@ -21,7 +25,7 @@ import java.util.logging.Logger;
  * Important policy:
  * - bundled files in src/main/resources are the exact shipped defaults
  * - built-in category mapping files are copied exactly from bundled defaults
- * - blank category files are only generated for custom categories added later
+ * - blank category files are generated only when new configured categories have no default file
  * - validation of built-in category coverage runs only when bundled defaults are
  *   being copied during bootstrap
  */

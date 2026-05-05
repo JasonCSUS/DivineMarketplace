@@ -1,5 +1,9 @@
 package divinejason.divinemarketplace.command;
 
+
+/*
+ * File role: Handles the market item admin command subcommand group and keeps its permission checks, parsing, and output in one file.
+ */
 import divinejason.divinemarketplace.auction.model.CustomItemDefinition;
 import divinejason.divinemarketplace.auction.model.CustomItemDefinitionState;
 import divinejason.divinemarketplace.auction.model.CustomItemTypeExtractionResult;

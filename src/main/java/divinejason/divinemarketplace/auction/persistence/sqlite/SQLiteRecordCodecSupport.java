@@ -1,5 +1,9 @@
 package divinejason.divinemarketplace.auction.persistence.sqlite;
 
+
+/*
+ * File role: Serializes and deserializes ItemStack snapshots and UUID/time values shared by SQLite persistence stores.
+ */
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.util.io.BukkitObjectInputStream;
 import org.bukkit.util.io.BukkitObjectOutputStream;

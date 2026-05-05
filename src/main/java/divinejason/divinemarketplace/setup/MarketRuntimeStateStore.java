@@ -1,5 +1,9 @@
 package divinejason.divinemarketplace.setup;
 
+
+/*
+ * File role: Persists small runtime markers such as last maintenance timestamps in SQLite-backed runtime state.
+ */
 import divinejason.divinemarketplace.storage.sqlite.SQLiteStore;
 
 import java.sql.SQLException;

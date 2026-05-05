@@ -1,5 +1,9 @@
 package divinejason.divinemarketplace.command;
 
+
+/*
+ * File role: Carries the dependencies needed by market player command handlers so command code does not pull directly from the plugin singleton.
+ */
 import divinejason.divinemarketplace.auction.model.SortMode;
 import divinejason.divinemarketplace.auction.persistence.sqlite.SQLiteListingStore;
 import divinejason.divinemarketplace.auction.service.CategoryService;

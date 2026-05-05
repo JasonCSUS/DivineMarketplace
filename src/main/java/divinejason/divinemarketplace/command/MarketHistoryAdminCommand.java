@@ -1,5 +1,9 @@
 package divinejason.divinemarketplace.command;
 
+
+/*
+ * File role: Handles the market history admin command subcommand group and keeps its permission checks, parsing, and output in one file.
+ */
 import divinejason.divinemarketplace.auction.model.AdminTransactionRecord;
 import org.bukkit.Bukkit;
 import org.bukkit.OfflinePlayer;

@@ -10,10 +10,12 @@ storage:
     sqliteFile: "data/market.db"
     modulePrefix: "market"
   limits:
+    # History limits are enforced against each SQLite table's encoded payload size, not the shared DB file size.
     salesHistoryMaxMb: 50
     adminSalesHistoryMaxMb: 25
     adminListingsHistoryMaxMb: 25
     adminClaimsHistoryMaxMb: 25
+    # Item-claim cleanup only removes abandoned claims older than storage.cleanup.abandonedItemClaimDays.
     itemClaimsSoftMaxMb: 100
   cleanup:
     abandonedItemClaimDays: 30
