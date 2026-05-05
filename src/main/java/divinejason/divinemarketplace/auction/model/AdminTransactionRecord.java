@@ -3,14 +3,14 @@ package divinejason.divinemarketplace.auction.model;
 import java.util.UUID;
 
 /**
- * Mandatory binary admin/audit transaction record.
+ * Mandatory SQLite-backed admin/audit transaction record.
  *
  * This is separate from:
  * - player-facing market history
  * - recommendation training inputs
  * - human-readable text log copies
  *
- * All market actions should be written to binary admin history so admins can
+ * All market actions should be written to SQLite admin history so admins can
  * inspect disputes, accidents, exploit attempts, and system errors.
  */
 public record AdminTransactionRecord(

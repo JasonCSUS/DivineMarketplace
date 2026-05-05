@@ -3,7 +3,7 @@ package divinejason.divinemarketplace.auction.model;
 import java.util.UUID;
 
 /**
- * Durable money-claim balance stored in money_claims.bin.
+ * Durable money-claim balance persisted in SQLite money_claims storage.
  *
  * Locked v1 rules:
  * - one running balance per player

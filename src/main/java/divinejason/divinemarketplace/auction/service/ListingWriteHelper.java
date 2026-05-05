@@ -99,7 +99,16 @@ public final class ListingWriteHelper {
         }
 
         categoryService.refreshIndexesFor(savedListing.marketKey(), savedListing.categoryId());
-        return new ListingWriteResult(savedListing, mergedIntoExisting);
+        return new ListingWriteResult(savedListing, mergedIntoExisting, mergeTarget);
+    }
+
+    public void rollbackWrite(ListingWriteResult writeResult) {
+        if (writeResult.previousListing() == null) {
+            listingStore.delete(writeResult.listing().listingId());
+        } else {
+            listingStore.saveOrReplace(writeResult.previousListing());
+        }
+        categoryService.refreshIndexesFor(writeResult.listing().marketKey(), writeResult.listing().categoryId());
     }
 
     public static final class ListingWriteException extends RuntimeException {
@@ -115,6 +124,6 @@ public final class ListingWriteHelper {
         }
     }
 
-    public record ListingWriteResult(Listing listing, boolean mergedIntoExisting) {
+    public record ListingWriteResult(Listing listing, boolean mergedIntoExisting, Listing previousListing) {
     }
 }

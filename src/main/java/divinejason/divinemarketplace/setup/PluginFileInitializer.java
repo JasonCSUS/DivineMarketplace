@@ -45,16 +45,13 @@ public final class PluginFileInitializer {
             boolean copiedCategoryConfig = ensureBundledFile("defaults/category_config.yml", PluginDirectoryLayout.resolveCategoryConfigFile(dataFolder), logger);
 
             ensureBundledFile("config.yml", PluginDirectoryLayout.resolveConfigFile(dataFolder), logger);
+            ensureBundledFile("defaults/menu.yml", PluginDirectoryLayout.resolveMenuConfigFile(dataFolder), logger);
             ensureBundledFile("defaults/custom/custom_items.yml", PluginDirectoryLayout.resolveCustomItemsFile(dataFolder), logger);
             ensureBundledFile("defaults/custom/custom_enchants.yml", PluginDirectoryLayout.resolveCustomEnchantsFile(dataFolder), logger);
-            ensureBundledFile("permissions.txt", PluginDirectoryLayout.resolvePermissionsFile(dataFolder), logger);
+            ensureBundledFile("defaults/permissions.txt", PluginDirectoryLayout.resolvePermissionsFile(dataFolder), logger);
 
             for (Path logFile : PluginDirectoryLayout.requiredTextLogFiles(dataFolder)) {
                 ensureTextFile(logFile, "");
-            }
-
-            for (Path binaryFile : PluginDirectoryLayout.requiredBinaryStateFiles(dataFolder)) {
-                ensureBinaryStateFile(binaryFile);
             }
 
             boolean copiedAnyBundledCategoryDefaults = ensureCategoryFiles(dataFolder, logger);
@@ -250,14 +247,6 @@ public final class PluginFileInitializer {
         }
     }
 
-    private void ensureBinaryStateFile(Path path) throws IOException {
-        if (Files.exists(path)) {
-            return;
-        }
-
-        ensureDirectory(path.getParent());
-        Files.createFile(path);
-    }
 
     private void ensureTextFile(Path path, String contents) throws IOException {
         if (Files.exists(path)) {

@@ -41,6 +41,14 @@ public final class DefaultHistoryService implements HistoryService {
     }
 
     @Override
+    public List<YearMonth> getPriceHistoryMonths(String marketKey) {
+        if (!isPriceHistoryEnabled(marketKey)) {
+            return List.of();
+        }
+        return recommendationHistoryStore.getMonthsWithData(marketKey);
+    }
+
+    @Override
     public boolean isSaleHistoryEnabled(String marketKey) {
         return true;
     }

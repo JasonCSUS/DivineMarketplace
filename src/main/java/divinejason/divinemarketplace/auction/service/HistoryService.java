@@ -9,25 +9,30 @@ import java.util.List;
 /**
  * Read-only history service for player-facing GUI/command lookups.
  *
- * Known complexity:
- * - enchant-book Sale History uses special matching rules
- * - Price History for mixed-enchant books is disabled
+ * Sale history is not admin audit history. It is the compact market-facing view
+ * players use to judge recent prices. Enchanted books intentionally use broader
+ * matching than normal items so a single-enchant book can show relevant mixed
+ * book sales, and a mixed-book page can show its component single-book sales.
  */
 public interface HistoryService {
 
     /**
-     * Return player-facing exact sale history for one market key.
+     * Returns player-facing sale history for one market key.
      *
-     * TODO during implementation:
-     * - singular enchant groups should include singular sales plus mixed-book sales containing that enchant
-     * - mixed-book groups should include exact mixed sales plus singular component sales
+     * Normal items use exact market-key matching. Enchanted-book groups may use
+     * component matching according to InMemorySaleHistoryIndex rules.
      */
     List<SaleRecord> getSaleHistory(String marketKey, int page, int pageSize);
 
     /**
-     * Return compact recommendation-history points for one market key and month.
+     * Returns compact recommended-price checkpoints for one market key/month.
      */
     List<RecommendationHistoryPoint> getPriceHistory(String marketKey, YearMonth month);
+
+    /**
+     * Returns months that actually contain price checkpoints, newest first.
+     */
+    List<YearMonth> getPriceHistoryMonths(String marketKey);
 
     boolean isSaleHistoryEnabled(String marketKey);
 

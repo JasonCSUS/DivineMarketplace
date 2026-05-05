@@ -7,8 +7,9 @@ import java.util.List;
  * Central path blueprint for the on-disk plugin layout.
  *
  * Current storage direction:
- * - core runtime market state is moving into SQLite
+ * - core runtime market state lives in SQLite under data/market.db
  * - bundled defaults and editable custom definitions remain as text files
+ * - logs/exports remain plain text/YAML for admin review
  */
 public final class PluginDirectoryLayout {
     private PluginDirectoryLayout() {
@@ -16,6 +17,7 @@ public final class PluginDirectoryLayout {
 
     public static final String CONFIG_YML = "config.yml";
     public static final String CATEGORY_CONFIG_YML = "category_config.yml";
+    public static final String MENU_YML = "menu.yml";
     public static final String PERMISSIONS_TXT = "permissions.txt";
 
     public static final String DEFAULTS_CATEGORY_RESOURCE_PREFIX = "defaults/categories/";
@@ -35,9 +37,6 @@ public final class PluginDirectoryLayout {
     public static final String LOG_EXPORTS_DIR = "logs/exports";
 
     public static final String DATA_MARKET_DB = "data/market.db";
-    public static final String DATA_PACKAGE_CACHE = "data/package_cache.bin";
-    public static final String DATA_UNKNOWN_CUSTOM_ITEMS = "data/unknown_custom_items.bin";
-    public static final String DATA_UNKNOWN_CUSTOM_ENCHANTS = "data/unknown_custom_enchants.bin";
 
     public static Path resolveConfigFile(Path dataFolder) {
         return dataFolder.resolve(CONFIG_YML);
@@ -49,6 +48,10 @@ public final class PluginDirectoryLayout {
 
     public static Path resolvePermissionsFile(Path dataFolder) {
         return dataFolder.resolve(PERMISSIONS_TXT);
+    }
+
+    public static Path resolveMenuConfigFile(Path dataFolder) {
+        return dataFolder.resolve(MENU_YML);
     }
 
     public static Path resolveCustomItemsFile(Path dataFolder) {
@@ -82,13 +85,6 @@ public final class PluginDirectoryLayout {
         );
     }
 
-    public static List<Path> requiredBinaryStateFiles(Path dataFolder) {
-        return List.of(
-                dataFolder.resolve(DATA_PACKAGE_CACHE),
-                dataFolder.resolve(DATA_UNKNOWN_CUSTOM_ITEMS),
-                dataFolder.resolve(DATA_UNKNOWN_CUSTOM_ENCHANTS)
-        );
-    }
 
     public static List<Path> requiredTextLogFiles(Path dataFolder) {
         return List.of(

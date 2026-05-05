@@ -13,8 +13,11 @@ import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.PlayerInventory;
 
+import java.util.LinkedHashSet;
 import java.util.Objects;
+import java.util.Set;
 import java.util.UUID;
+import java.util.logging.Logger;
 
 /**
  * Concrete listing lifecycle implementation.
@@ -24,6 +27,7 @@ import java.util.UUID;
  * - this class stays focused on main-hand validation/removal and cancel/expire flow
  */
 public final class DefaultListingService implements ListingService {
+    private final Logger logger = Logger.getLogger(DefaultListingService.class.getName());
     private static final String ADMIN_CANCEL_PERMISSION = "divinemarketplace.admin.listing.cancel";
     private static final String ADMIN_PERMISSION = "divinemarketplace.admin";
 
@@ -100,6 +104,7 @@ public final class DefaultListingService implements ListingService {
             return ListingCreateResult.failure(failure.reason(), quantity, clampedQuantity, failure.getMessage());
         }
 
+        MarketWriteTransaction transaction = new MarketWriteTransaction(logger);
         try {
             ListingWriteHelper.ListingWriteResult writeResult = listingWriteHelper.createOrMerge(
                     seller.getUniqueId(),
@@ -110,6 +115,7 @@ public final class DefaultListingService implements ListingService {
                     listingPolicy,
                     nowEpochMillis
             );
+            registerListingWriteRollback(transaction, writeResult);
 
             Listing savedListing = writeResult.listing();
 
@@ -122,6 +128,8 @@ public final class DefaultListingService implements ListingService {
                     writeResult.mergedIntoExisting() ? "USER_MERGE" : "USER_LIST"
             ));
 
+            transaction.commit();
+
             return ListingCreateResult.success(
                     savedListing.listingId(),
                     writeResult.mergedIntoExisting(),
@@ -132,9 +140,11 @@ public final class DefaultListingService implements ListingService {
                     savedListing.categoryId()
             );
         } catch (ListingWriteHelper.ListingWriteException exception) {
+            transaction.rollbackQuietly();
             restoreReservation(inventory, reservation);
             return ListingCreateResult.failure(exception.failureReason(), quantity, clampedQuantity, exception.getMessage());
         } catch (RuntimeException exception) {
+            transaction.rollbackQuietly();
             restoreReservation(inventory, reservation);
             return ListingCreateResult.failure(ListingCreateFailureReason.INTERNAL_ERROR, quantity, clampedQuantity, exception.getMessage());
         }
@@ -153,41 +163,15 @@ public final class DefaultListingService implements ListingService {
             throw new IllegalStateException("Actor is not allowed to cancel this listing.");
         }
 
-        listingStore.delete(listing.listingId());
-
         long nowEpochMillis = System.currentTimeMillis();
-        createOrMergeItemClaim(
-                listing.sellerUuid(),
-                listing.listedItemSnapshot(),
-                listing.amount(),
-                nowEpochMillis
-        );
+        MarketWriteTransaction transaction = new MarketWriteTransaction(logger);
 
-        adminHistoryService.recordListing(buildListingAdminRecord(
-                AdminTransactionType.CANCEL,
-                listing,
-                actor.getUniqueId(),
-                nowEpochMillis,
-                "CANCELLED",
-                actor.getUniqueId().equals(listing.sellerUuid()) ? "SELLER_CANCEL" : "ADMIN_CANCEL"
-        ));
-
-        marketAnalyticsService.recordListingCancelled(listing);
-        categoryService.refreshIndexesFor(listing.marketKey(), listing.categoryId());
-    }
-
-    @Override
-    public void expireDueListings(long nowEpochMillis) {
-        Iterable<Listing> active = listingStore.getAllActive();
-        for (Listing listing : active) {
-            long expiresAt = listing.listedAtEpochMillis() + listing.listingDurationMillis();
-            if (nowEpochMillis < expiresAt) {
-                continue;
-            }
-
+        try {
             listingStore.delete(listing.listingId());
+            transaction.onRollback(() -> listingStore.saveOrReplace(listing));
 
-            createOrMergeItemClaim(
+            createOrMergeItemClaimWithRollback(
+                    transaction,
                     listing.sellerUuid(),
                     listing.listedItemSnapshot(),
                     listing.amount(),
@@ -195,17 +179,68 @@ public final class DefaultListingService implements ListingService {
             );
 
             adminHistoryService.recordListing(buildListingAdminRecord(
-                    AdminTransactionType.EXPIRE,
+                    AdminTransactionType.CANCEL,
                     listing,
-                    listing.sellerUuid(),
+                    actor.getUniqueId(),
                     nowEpochMillis,
-                    "EXPIRED",
-                    "LISTING_DURATION_ELAPSED"
+                    "CANCELLED",
+                    actor.getUniqueId().equals(listing.sellerUuid()) ? "SELLER_CANCEL" : "ADMIN_CANCEL"
             ));
 
-            marketAnalyticsService.recordListingExpired(listing);
-            categoryService.refreshIndexesFor(listing.marketKey(), listing.categoryId());
+            marketAnalyticsService.recordListingCancelled(listing);
+            transaction.commit();
+        } catch (RuntimeException exception) {
+            transaction.rollbackQuietly();
+            throw exception;
         }
+
+        categoryService.refreshIndexesFor(listing.marketKey(), listing.categoryId());
+    }
+
+    @Override
+    public void expireDueListings(long nowEpochMillis) {
+        Iterable<Listing> active = listingStore.getAllActive();
+        Set<String> affectedCategoryIds = new LinkedHashSet<>();
+
+        for (Listing listing : active) {
+            long expiresAt = listing.listedAtEpochMillis() + listing.listingDurationMillis();
+            if (nowEpochMillis < expiresAt) {
+                continue;
+            }
+
+            MarketWriteTransaction transaction = new MarketWriteTransaction(logger);
+
+            try {
+                listingStore.delete(listing.listingId());
+                transaction.onRollback(() -> listingStore.saveOrReplace(listing));
+
+                createOrMergeItemClaimWithRollback(
+                        transaction,
+                        listing.sellerUuid(),
+                        listing.listedItemSnapshot(),
+                        listing.amount(),
+                        nowEpochMillis
+                );
+
+                adminHistoryService.recordListing(buildListingAdminRecord(
+                        AdminTransactionType.EXPIRE,
+                        listing,
+                        listing.sellerUuid(),
+                        nowEpochMillis,
+                        "EXPIRED",
+                        "LISTING_DURATION_ELAPSED"
+                ));
+
+                marketAnalyticsService.recordListingExpired(listing);
+                transaction.commit();
+                affectedCategoryIds.add(listing.categoryId());
+            } catch (RuntimeException exception) {
+                transaction.rollbackQuietly();
+                logger.warning("Failed to expire listing " + listing.listingId() + ": " + exception.getMessage());
+            }
+        }
+
+        categoryService.refreshIndexesForCategories(affectedCategoryIds);
     }
 
     private SourceSelection selectMainHandSource(PlayerInventory inventory, ItemStack sourceItem) {
@@ -264,8 +299,9 @@ public final class DefaultListingService implements ListingService {
         inventory.setStorageContents(storageContents);
     }
 
-    private void createOrMergeItemClaim(UUID ownerUuid, ItemStack baseSnapshot, int amount, long createdAtEpochMillis) {
+    private void createOrMergeItemClaimWithRollback(MarketWriteTransaction transaction, UUID ownerUuid, ItemStack baseSnapshot, int amount, long createdAtEpochMillis) {
         ItemStack normalizedSnapshot = normalizeSnapshotAmount(baseSnapshot);
+        ItemClaimRecord previousMergeTarget = findExistingSimilarClaim(ownerUuid, normalizedSnapshot);
         ItemClaimRecord incomingClaim = new ItemClaimRecord(
                 UUID.randomUUID(),
                 ownerUuid,
@@ -273,7 +309,33 @@ public final class DefaultListingService implements ListingService {
                 amount,
                 createdAtEpochMillis
         );
-        itemClaimStore.mergeOrCreate(incomingClaim);
+        ItemClaimRecord savedClaim = itemClaimStore.mergeOrCreate(incomingClaim);
+        transaction.onRollback(() -> {
+            if (previousMergeTarget == null) {
+                itemClaimStore.delete(savedClaim.claimId(), ownerUuid);
+            } else {
+                itemClaimStore.saveOrReplace(previousMergeTarget);
+            }
+        });
+    }
+
+    private ItemClaimRecord findExistingSimilarClaim(UUID ownerUuid, ItemStack normalizedSnapshot) {
+        for (ItemClaimRecord claim : itemClaimStore.findByOwner(ownerUuid, 0, Integer.MAX_VALUE)) {
+            if (itemsSimilarIgnoringAmount(claim.claimItemSnapshot(), normalizedSnapshot)) {
+                return claim;
+            }
+        }
+        return null;
+    }
+
+    private boolean itemsSimilarIgnoringAmount(ItemStack left, ItemStack right) {
+        ItemStack leftCopy = normalizeSnapshotAmount(left);
+        ItemStack rightCopy = normalizeSnapshotAmount(right);
+        return leftCopy.isSimilar(rightCopy);
+    }
+
+    private void registerListingWriteRollback(MarketWriteTransaction transaction, ListingWriteHelper.ListingWriteResult writeResult) {
+        transaction.onRollback(() -> listingWriteHelper.rollbackWrite(writeResult));
     }
 
     private AdminTransactionRecord buildListingAdminRecord(

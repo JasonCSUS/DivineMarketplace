@@ -1,5 +1,0 @@
-exit=126
-STDOUT:
-
-STDERR:
-bash: line 1: ./gradlew: Permission denied

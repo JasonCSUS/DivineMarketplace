@@ -11,6 +11,7 @@ public enum MenuView {
     ITEM_DETAIL,
     MY_LISTINGS,
     CLAIMS,
+    CLAIM_DETAIL,
     SALE_HISTORY,
     PRICE_HISTORY
 }

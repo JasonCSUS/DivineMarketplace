@@ -16,11 +16,13 @@ public final class SQLiteDatabase implements AutoCloseable {
     private static final int POOL_SIZE = 4;
 
     private final String name;
+    private final Path file;
     private final HikariDataSource dataSource;
     private final ExecutorService writeExecutor;
 
-    private SQLiteDatabase(String name, HikariDataSource dataSource, ExecutorService writeExecutor) {
+    private SQLiteDatabase(String name, Path file, HikariDataSource dataSource, ExecutorService writeExecutor) {
         this.name = name;
+        this.file = file;
         this.dataSource = dataSource;
         this.writeExecutor = writeExecutor;
     }
@@ -51,7 +53,7 @@ public final class SQLiteDatabase implements AutoCloseable {
             return t;
         });
 
-        return new SQLiteDatabase(name, dataSource, writeExecutor);
+        return new SQLiteDatabase(name, file, dataSource, writeExecutor);
     }
 
     public SQLiteStore store(String modulePrefix) {
@@ -60,6 +62,10 @@ public final class SQLiteDatabase implements AutoCloseable {
 
     public String getName() {
         return name;
+    }
+
+    public Path getFile() {
+        return file;
     }
 
     public HikariDataSource getDataSource() {

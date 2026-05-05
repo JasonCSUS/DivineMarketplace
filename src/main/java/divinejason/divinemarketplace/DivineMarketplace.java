@@ -17,12 +17,16 @@ import divinejason.divinemarketplace.command.MarketCommand;
 import divinejason.divinemarketplace.config.ConfigService;
 import divinejason.divinemarketplace.config.MainConfig;
 import divinejason.divinemarketplace.config.MainConfigLoader;
+import divinejason.divinemarketplace.listener.PlayerConnectionListener;
+import divinejason.divinemarketplace.menu.*;
+import divinejason.divinemarketplace.prompt.MarketChatPromptService;
 import divinejason.divinemarketplace.setup.MarketRuntimeStateStore;
 import divinejason.divinemarketplace.setup.PluginDirectoryLayout;
 import divinejason.divinemarketplace.setup.PluginFileInitializer;
 import divinejason.divinemarketplace.storage.sqlite.SQLiteDatabase;
 import divinejason.divinemarketplace.storage.sqlite.SQLiteStore;
 import net.milkbowl.vault.economy.Economy;
+import org.bukkit.entity.Player;
 import org.bukkit.plugin.RegisteredServiceProvider;
 import org.bukkit.plugin.java.JavaPlugin;
 
@@ -57,6 +61,8 @@ public final class DivineMarketplace extends JavaPlugin {
     private CustomItemTypeExtractor customItemTypeExtractor;
     private CustomItemMetadataLogService customItemMetadataLogService;
     private CustomItemCollisionLogService customItemCollisionLogService;
+    private DefaultEnchantmentMetadataService enchantmentMetadataService;
+    private StoredEnchantExtractor storedEnchantExtractor;
     private CategoryResolver categoryResolver;
     private ItemIdentityResolver itemIdentityResolver;
     private FlattenedMarketIndexService flattenedMarketIndexService;
@@ -80,6 +86,10 @@ public final class DivineMarketplace extends JavaPlugin {
     private PurchaseService purchaseService;
 
     private MarketCommand marketCommand;
+    private MenuController menuController;
+    private MenuSessionManager menuSessionManager;
+    private MenuDataFacade menuDataFacade;
+    private MarketChatPromptService chatPromptService;
 
     @Override
     public void onEnable() {
@@ -93,6 +103,9 @@ public final class DivineMarketplace extends JavaPlugin {
             initializeRuntimeObjects();
             registerCommand("market", marketCommand);
             marketRecalculationService.scheduleStartupAndDailyChecks();
+            scheduleHourlyListingExpiration();
+            scheduleListingWriteFlush();
+            scheduleItemClaimSoftLimitCleanup();
             logStartupSummary(logger);
             logger.info("DivineMarketplace enabled.");
         } catch (Exception exception) {
@@ -104,10 +117,13 @@ public final class DivineMarketplace extends JavaPlugin {
     @Override
     public void onDisable() {
         try {
+            if (listingStore != null) listingStore.flushPendingWritesBlocking();
             if (sqliteDatabase != null) sqliteDatabase.close();
         } catch (Exception exception) {
             getLogger().warning("Failed to close SQLite database cleanly: " + exception.getMessage());
         }
+        if (menuSessionManager != null) menuSessionManager.clearAll();
+        if (chatPromptService != null) chatPromptService.clearAll();
         ConfigService.get().clear();
         mainConfig = null;
         getLogger().info("DivineMarketplace disabled.");
@@ -129,7 +145,7 @@ public final class DivineMarketplace extends JavaPlugin {
     }
 
     private void initializeRuntimeObjects() {
-        listingStore = new SQLiteListingStore(sqliteStore);
+        listingStore = new SQLiteListingStore(sqliteStore, getLogger());
         itemClaimStore = new SQLiteItemClaimStore(sqliteStore);
         moneyClaimStore = new SQLiteMoneyClaimStore(sqliteStore);
         salesStore = new SQLiteSalesStore(sqliteStore);
@@ -152,20 +168,32 @@ public final class DivineMarketplace extends JavaPlugin {
         customItemRegistry = new DefaultCustomItemRegistry(getLogger(), customItemDataSource, customItemCollisionLogService);
         customItemMetadataLogService = new CustomItemMetadataLogService(getDataFolder().toPath());
         customItemTypeExtractor = new ConfigDrivenCustomItemTypeExtractor(customItemOverrideStore);
+        enchantmentMetadataService = new DefaultEnchantmentMetadataService(customEnchantStore);
+        storedEnchantExtractor = new StoredEnchantExtractor();
         categoryResolver = new DefaultCategoryResolver(flattenedMarketIndexService);
-        itemIdentityResolver = new DefaultItemIdentityResolver(categoryResolver, customItemRegistry, customItemTypeExtractor, customItemMetadataLogService);
+        itemIdentityResolver = new DefaultItemIdentityResolver(categoryResolver, customItemRegistry, customItemTypeExtractor, customItemMetadataLogService, enchantmentMetadataService, storedEnchantExtractor);
 
         priceRecommendationService = new DefaultPriceRecommendationService(
                 this,
                 flattenedMarketIndexService,
-                marketKey -> listingStore.findAll(ConfigService.get().defaultSortMode(), 0, Integer.MAX_VALUE).stream().filter(listing -> listing.marketKey().equals(marketKey)).toList(),
+                new DefaultPriceRecommendationService.ActiveListingLookup() {
+                    @Override
+                    public java.util.List<divinejason.divinemarketplace.auction.model.Listing> getActiveListingsForMarketKey(String marketKey) {
+                        return listingStore.findActiveByMarketKeyUnsorted(marketKey);
+                    }
+
+                    @Override
+                    public java.util.List<divinejason.divinemarketplace.auction.model.Listing> getAllActiveListings() {
+                        return listingStore.findAllActiveUnsorted();
+                    }
+                },
                 saleHistoryIndex,
                 new MarketProfileCalculator(),
                 marketPriceStore,
                 recommendationHistoryStore
         );
 
-        categoryService = new DefaultCategoryService(() -> listingStore.findAll(ConfigService.get().defaultSortMode(), 0, Integer.MAX_VALUE), flattenedMarketIndexService);
+        categoryService = new DefaultCategoryService(() -> listingStore.findAllActiveUnsorted(), flattenedMarketIndexService, enchantmentMetadataService);
         marketAnalyticsService = new DefaultMarketAnalyticsService(salesStore, saleHistoryIndex);
         adminHistoryService = new DefaultAdminHistoryService(adminSalesStore, adminListingsStore, adminClaimsStore);
         adminHistoryExportService = new DefaultAdminHistoryExportService((DefaultAdminHistoryService) adminHistoryService, getDataFolder().toPath().resolve("logs").resolve("exports"));
@@ -178,18 +206,120 @@ public final class DivineMarketplace extends JavaPlugin {
         claimService = new DefaultClaimService(itemClaimStore, moneyClaimStore, itemIdentityResolver, adminHistoryService, economy, storageItemDeliveryHelper, listingPolicyResolver, listingWriteHelper);
         purchaseService = new DefaultPurchaseService(listingStore, itemClaimStore, moneyClaimStore, itemIdentityResolver, adminHistoryService, categoryService, marketAnalyticsService, storageItemDeliveryHelper, economy);
 
+        initializeMenuRuntime();
+
         marketRecalculationService = new MarketRecalculationService(this, flattenedMarketIndexService, priceRecommendationService, marketRuntimeStateStore);
-        marketCommand = new MarketCommand(this, listingService, claimService, listingStore, historyService, (DefaultAdminHistoryService) adminHistoryService, adminHistoryExportService, categoryService, flattenedMarketIndexService, priceRecommendationService, customItemRegistry, marketRecalculationService, customEnchantStore, customItemTypeExtractor, customItemMetadataLogService, customItemOverrideStore, customItemCollisionLogService);
+        marketCommand = new MarketCommand(this, menuController, chatPromptService, listingService, claimService, listingStore, historyService, (DefaultAdminHistoryService) adminHistoryService, adminHistoryExportService, categoryService, flattenedMarketIndexService, priceRecommendationService, itemIdentityResolver, customItemRegistry, marketRecalculationService, customEnchantStore, customItemTypeExtractor, customItemMetadataLogService, customItemOverrideStore, customItemCollisionLogService, storedEnchantExtractor);
+    }
+
+    private void initializeMenuRuntime() {
+        menuSessionManager = new MenuSessionManager();
+        menuDataFacade = new MenuDataFacade(categoryService, listingStore, itemClaimStore, moneyClaimStore, historyService);
+        menuController = new MenuController(menuSessionManager, buildMenuRenderer());
+        chatPromptService = new MarketChatPromptService(this, listingService, claimService, menuController, menuDataFacade);
+        MenuClickRouter menuClickRouter = new MenuClickRouter(menuSessionManager, menuController, menuDataFacade, listingService, claimService, purchaseService, chatPromptService);
+        getServer().getPluginManager().registerEvents(new MarketMenuListener(this, menuSessionManager, menuClickRouter), this);
+        getServer().getPluginManager().registerEvents(chatPromptService, this);
+        getServer().getPluginManager().registerEvents(new PlayerConnectionListener(menuSessionManager, chatPromptService), this);
+    }
+
+    private MenuRenderer buildMenuRenderer() {
+        MenuVisualConfig menuVisualConfig = new MenuVisualConfigLoader(getLogger()).load(PluginDirectoryLayout.resolveMenuConfigFile(getDataFolder().toPath()));
+        MenuItemFactory menuItemFactory = new MenuItemFactory(menuVisualConfig);
+        return new MenuRenderer(menuDataFacade, menuItemFactory, menuVisualConfig);
+    }
+
+    private void reloadMenuRuntime() {
+        if (menuController == null || menuDataFacade == null) {
+            return;
+        }
+        menuController.updateRenderer(buildMenuRenderer());
     }
 
     public void reloadRuntimeData() {
         bootstrapFiles();
         loadAndCacheMainConfig();
+
+        listingStore.reload();
+        itemClaimStore.reload();
+        moneyClaimStore.reload();
+        salesStore.reload();
+        adminSalesStore.reload();
+        adminListingsStore.reload();
+        adminClaimsStore.reload();
+        recommendationHistoryStore.reload();
+
         flattenedMarketIndexService.reload();
         customItemRegistry.reload();
+        enchantmentMetadataService.reload();
         if (categoryResolver instanceof DefaultCategoryResolver resolver) resolver.reload();
         if (categoryService instanceof DefaultCategoryService categorySvc) categorySvc.reload();
-        listingStore.reload(); itemClaimStore.reload(); moneyClaimStore.reload(); salesStore.reload(); adminSalesStore.reload(); adminListingsStore.reload(); adminClaimsStore.reload(); recommendationHistoryStore.reload(); saleHistoryIndex.reload(); priceRecommendationService.reload();
+        saleHistoryIndex.reload();
+        priceRecommendationService.reload();
+        reloadMenuRuntime();
+    }
+
+    private void scheduleHourlyListingExpiration() {
+        long oneHourTicks = 20L * 60L * 60L;
+        getServer().getScheduler().runTaskTimer(this, () -> {
+            try {
+                listingService.expireDueListings(System.currentTimeMillis());
+            } catch (RuntimeException exception) {
+                getLogger().warning("Hourly listing expiration pass failed: " + exception.getMessage());
+            }
+        }, oneHourTicks, oneHourTicks);
+    }
+
+    private void scheduleListingWriteFlush() {
+        long fiveSecondsTicks = 20L * 5L;
+        getServer().getScheduler().runTaskTimer(this, () -> {
+            try {
+                listingStore.flushPendingWritesAsync();
+            } catch (RuntimeException exception) {
+                getLogger().warning("Queued listing write flush failed to start: " + exception.getMessage());
+            }
+        }, fiveSecondsTicks, fiveSecondsTicks);
+    }
+
+    private void scheduleItemClaimSoftLimitCleanup() {
+        long fiveMinutesTicks = 20L * 60L * 5L;
+        long thirtyMinutesTicks = 20L * 60L * 30L;
+        getServer().getScheduler().runTaskTimer(this, () -> {
+            try {
+                long softMaxBytes = ConfigService.get().itemClaimsSoftMaxBytes();
+                if (softMaxBytes <= 0L) {
+                    return;
+                }
+
+                long databaseBytes = sqliteStore.databaseFileSizeBytes();
+                if (databaseBytes < softMaxBytes) {
+                    return;
+                }
+
+                int deletedClaims = itemClaimStore.purgeOldestAbandonedClaims(System.currentTimeMillis());
+                if (deletedClaims <= 0) {
+                    warnAdminsAboutItemClaimStorage(databaseBytes, softMaxBytes);
+                } else {
+                    getLogger().info("Item-claim storage cleanup removed " + deletedClaims + " abandoned claim(s).");
+                }
+            } catch (RuntimeException exception) {
+                getLogger().warning("Item-claim storage cleanup check failed: " + exception.getMessage());
+            }
+        }, fiveMinutesTicks, thirtyMinutesTicks);
+    }
+
+    private void warnAdminsAboutItemClaimStorage(long databaseBytes, long softMaxBytes) {
+        String plain = "DivineMarketplace item-claim storage is above the soft limit and no abandoned claims were removed. Ask players to empty claim storage or raise storage.limits.itemClaimsSoftMaxMb.";
+        getLogger().warning(plain + " Current database size: " + databaseBytes + " bytes; soft limit: " + softMaxBytes + " bytes.");
+
+        String richMessage = "<yellow>DivineMarketplace item-claim storage is above the soft limit.</yellow> "
+                + "<gray>No abandoned claims were available for cleanup. Ask players to empty claim storage or raise "
+                + "storage.limits.itemClaimsSoftMaxMb.</gray>";
+        for (Player player : getServer().getOnlinePlayers()) {
+            if (player.hasPermission("divinemarketplace.admin")) {
+                player.sendRichMessage(richMessage);
+            }
+        }
     }
 
     private void logStartupSummary(Logger logger) {
@@ -209,6 +339,7 @@ public final class DivineMarketplace extends JavaPlugin {
     public ListingService getListingService() { return listingService; }
     public ClaimService getClaimService() { return claimService; }
     public PurchaseService getPurchaseService() { return purchaseService; }
+    public MenuController getMenuController() { return menuController; }
     public ItemIdentityResolver getItemIdentityResolver() { return itemIdentityResolver; }
     public CategoryResolver getCategoryResolver() { return categoryResolver; }
     public CategoryService getCategoryService() { return categoryService; }

@@ -7,6 +7,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Locale;
 import java.util.Objects;
 
 /**
@@ -28,7 +29,7 @@ public final class SQLiteCustomEnchantStore {
 
     public void upsert(String namespacedEnchantKey, String displayName, List<String> itemTokens) {
         try {
-            sqliteStore.put(TABLE, namespacedEnchantKey, encode(displayName, itemTokens));
+            sqliteStore.put(TABLE, normalizeKey(namespacedEnchantKey), encode(displayName, itemTokens));
         } catch (SQLException exception) {
             throw new IllegalStateException("Failed to write custom enchant definition to SQLite.", exception);
         }
@@ -38,12 +39,17 @@ public final class SQLiteCustomEnchantStore {
         try {
             Map<String, CustomEnchantEntry> result = new LinkedHashMap<>();
             for (Map.Entry<String, String> entry : sqliteStore.getAll(TABLE).entrySet()) {
-                result.put(entry.getKey(), decode(entry.getKey(), entry.getValue()));
+                String normalizedKey = normalizeKey(entry.getKey());
+                result.put(normalizedKey, decode(normalizedKey, entry.getValue()));
             }
             return result;
         } catch (SQLException exception) {
             throw new IllegalStateException("Failed to load custom enchant definitions from SQLite.", exception);
         }
+    }
+
+    private String normalizeKey(String namespacedEnchantKey) {
+        return namespacedEnchantKey == null ? "" : namespacedEnchantKey.trim().toLowerCase(Locale.ROOT);
     }
 
     private String encode(String displayName, List<String> itemTokens) {

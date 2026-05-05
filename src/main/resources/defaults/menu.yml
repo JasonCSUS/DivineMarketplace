@@ -1,0 +1,160 @@
+# Editable DivineMarketplace GUI visuals/layout map.
+# Material values can be vanilla material names or compatible material aliases.
+# customModelData is optional and can be used by resource-pack icons.
+
+titles:
+  main: "Divine Market"
+  category_browser: "Market Category"
+  search_results: "Market Search"
+  listing_browser: "Market Listings"
+  item_detail: "Market Item"
+  my_listings: "My Listings"
+  claims: "Market Claims"
+  claim_detail: "Claim Detail"
+  sale_history: "Sale History"
+  price_history: "Price History"
+
+slots:
+  nav:
+    back: 0
+    previous: 45
+    next: 53
+  main:
+    myListings: 0
+    claims: 9
+    claimEarnings: 18
+    listHeldItem: 4
+    search: 8
+    allListings: 49
+    categories: [11, 12, 13, 14, 15, 20, 21, 22, 23, 24, 29, 30, 31, 32, 33, 38, 39, 40, 41, 42]
+  category:
+    # Category names come from category_config.yml. This section only overrides GUI icon materials.
+    groups: [11, 12, 13, 14, 15, 20, 21, 22, 23, 24, 29, 30, 31, 32, 33]
+  listing:
+    sort: 8
+    listings: [11, 12, 13, 14, 15, 20, 21, 22, 23, 24, 29, 30, 31, 32, 33, 38, 39, 40, 41, 42]
+  detail:
+    decrease: 21
+    quantity: 22
+    increase: 23
+    confirm: 31
+    cancel: 40
+    saleHistory: 37
+    priceHistory: 43
+  claims:
+    earnings: 8
+    items: [11, 12, 13, 14, 15, 20, 21, 22, 23, 24, 29, 30, 31, 32, 33, 38, 39, 40, 41, 42]
+  claimDetail:
+    relist: 22
+    claimOne: 31
+    claimAll: 40
+  history:
+    previousMonth: 3
+    month: 4
+    nextMonth: 5
+    entries: [11, 12, 13, 14, 15, 20, 21, 22, 23, 24, 29, 30, 31, 32, 33, 38, 39, 40, 41, 42]
+
+items:
+  fillerBlack:
+    material: BLACK_STAINED_GLASS_PANE
+    name: " "
+  fillerPurple:
+    material: PURPLE_STAINED_GLASS_PANE
+    name: " "
+  back:
+    material: ARROW
+    name: "<yellow>Back</yellow>"
+  previousPage:
+    material: ARROW
+    name: "<yellow>Previous Page</yellow>"
+  nextPage:
+    material: ARROW
+    name: "<yellow>Next Page</yellow>"
+  search:
+    material: COMPASS
+    name: "<aqua>Search</aqua>"
+  listHeldItem:
+    material: ANVIL
+    name: "<green>List Held Item</green>"
+  claimEarnings:
+    material: GOLD_INGOT
+    name: "<gold>Claim Earnings</gold>"
+  relistClaim:
+    material: EMERALD
+    name: "<green>Relist Claim</green>"
+  claimOneChunk:
+    material: CHEST
+    name: "<green>Claim One Stack</green>"
+  claimAsMuchAsFits:
+    material: ENDER_CHEST
+    name: "<green>Claim As Much As Fits</green>"
+  sort:
+    material: HOPPER
+    name: "<yellow>Sort</yellow>"
+  marketGroup:
+    material: CHEST
+  enchantTarget:
+    material: ENCHANTED_BOOK
+  listingUnavailable:
+    material: BARRIER
+    name: "<red>Listing unavailable</red>"
+  ownerListingInfo:
+    material: PAPER
+    name: "<yellow>Your Listing</yellow>"
+  confirmPurchase:
+    material: EMERALD
+    name: "<green>Confirm Purchase</green>"
+  quantity:
+    material: PAPER
+  increase:
+    material: LIME_DYE
+    name: "<green>Increase Quantity</green>"
+  decrease:
+    material: RED_DYE
+    name: "<red>Decrease Quantity</red>"
+  cancelListing:
+    material: BARRIER
+    name: "<red>Cancel Listing</red>"
+  saleHistory:
+    material: BOOK
+    name: "<gold>Sale History</gold>"
+  priceHistory:
+    material: CLOCK
+    name: "<gold>Price History</gold>"
+  previousMonth:
+    material: ARROW
+    name: "<yellow>Previous Month</yellow>"
+  nextMonth:
+    material: ARROW
+    name: "<yellow>Next Month</yellow>"
+  saleHistoryEntry:
+    material: PAPER
+  priceHistoryEntry:
+    material: PAPER
+  monthContext:
+    material: CLOCK
+  info:
+    material: PAPER
+
+  category:
+    # Category names come from category_config.yml. This section only overrides GUI icon materials.
+    building_blocks:
+      material: STONE
+    decorative_blocks:
+      material: FLOWER_POT
+    tools:
+      material: DIAMOND_PICKAXE
+    weapons:
+      material: DIAMOND_SWORD
+    armor:
+      material: DIAMOND_CHESTPLATE
+    enchanted_books:
+      material: ENCHANTED_BOOK
+    food:
+      material: COOKED_BEEF
+    farming:
+      material: WHEAT
+    ores:
+      material: DIAMOND_ORE
+    redstone:
+      material: REDSTONE

@@ -1,5 +1,6 @@
 package divinejason.divinemarketplace.auction.service;
 
+import divinejason.divinemarketplace.auction.model.CategoryDefinition;
 import divinejason.divinemarketplace.auction.model.CustomItemDefinition;
 import divinejason.divinemarketplace.auction.model.CustomItemDefinitionState;
 import divinejason.divinemarketplace.auction.model.FlattenedMarketIndexEntry;
@@ -26,8 +27,11 @@ import java.util.logging.Logger;
 /**
  * SQLite-backed flattened market index service.
  *
- * Runtime reads now come from SQLite.
- * Seed YAML/resources are only consulted when the SQLite market_index table is empty.
+ * Runtime item/category reads come from SQLite once the market_index table has
+ * been seeded. category_config.yml remains the authoritative source for
+ * top-level browse presentation: display names, icons, and category order. That
+ * keeps player-facing menus readable without coupling category labels to the
+ * internal category id used by commands, storage, and admin tools.
  */
 public final class FlattenedMarketIndexService {
     private final Path dataFolder;
@@ -36,6 +40,7 @@ public final class FlattenedMarketIndexService {
 
     private final Map<String, FlattenedMarketIndexEntry> byMarketKey = new LinkedHashMap<>();
     private final Map<String, String> normalizedDisplayNameToMarketKey = new LinkedHashMap<>();
+    private final Map<String, CategoryDefinition> categoryDefinitionsById = new LinkedHashMap<>();
 
     public FlattenedMarketIndexService(JavaPlugin plugin, SQLiteMarketIndexStore marketIndexStore) {
         this.dataFolder = Objects.requireNonNull(plugin, "plugin").getDataFolder().toPath();
@@ -45,6 +50,8 @@ public final class FlattenedMarketIndexService {
     }
 
     public synchronized void reload() {
+        reloadCategoryDefinitions();
+
         Map<String, FlattenedMarketIndexEntry> loaded = marketIndexStore.loadAll();
         if (loaded.isEmpty()) {
             List<FlattenedMarketIndexEntry> seeded = buildSeedEntriesFromDefinitions();
@@ -121,6 +128,14 @@ public final class FlattenedMarketIndexService {
 
     public synchronized List<String> getCategoryIds(boolean includeUnsorted) {
         Set<String> ids = new LinkedHashSet<>();
+
+        for (String categoryId : categoryDefinitionsById.keySet()) {
+            if (!includeUnsorted && "unsorted".equalsIgnoreCase(categoryId)) {
+                continue;
+            }
+            ids.add(categoryId);
+        }
+
         for (FlattenedMarketIndexEntry entry : byMarketKey.values()) {
             if (!includeUnsorted && "unsorted".equalsIgnoreCase(entry.categoryId())) {
                 continue;
@@ -128,13 +143,27 @@ public final class FlattenedMarketIndexService {
             ids.add(entry.categoryId());
         }
 
-        List<String> ordered = new ArrayList<>(ids);
-        ordered.sort(String.CASE_INSENSITIVE_ORDER);
-        if (includeUnsorted && ids.contains("unsorted")) {
-            ordered.removeIf(id -> "unsorted".equalsIgnoreCase(id));
-            ordered.add("unsorted");
+        if (includeUnsorted && ids.removeIf(id -> "unsorted".equalsIgnoreCase(id))) {
+            ids.add("unsorted");
         }
-        return ordered;
+        return new ArrayList<>(ids);
+    }
+
+    public synchronized CategoryDefinition getCategoryDefinition(String categoryId) {
+        String normalized = normalizeCategory(categoryId);
+        CategoryDefinition definition = categoryDefinitionsById.get(normalized);
+        if (definition != null) {
+            return definition;
+        }
+        return new CategoryDefinition(normalized, humanizeToken(normalized), "CHEST");
+    }
+
+    public synchronized String getCategoryDisplayName(String categoryId) {
+        return getCategoryDefinition(categoryId).displayName();
+    }
+
+    public synchronized String getCategoryIconKey(String categoryId) {
+        return getCategoryDefinition(categoryId).iconKey();
     }
 
     public synchronized List<FlattenedMarketIndexEntry> getFlaggedEntries() {
@@ -204,8 +233,35 @@ public final class FlattenedMarketIndexService {
         reload();
     }
 
+    private void reloadCategoryDefinitions() {
+        categoryDefinitionsById.clear();
+
+        YamlConfiguration categoryConfig = YamlConfiguration.loadConfiguration(
+                PluginDirectoryLayout.resolveCategoryConfigFile(dataFolder).toFile()
+        );
+        ConfigurationSection categoriesSection = categoryConfig.getConfigurationSection("categories");
+        if (categoriesSection == null) {
+            categoryDefinitionsById.put("unsorted", new CategoryDefinition("unsorted", "Unsorted", "BARRIER"));
+            return;
+        }
+
+        for (String rawCategoryId : categoriesSection.getKeys(false)) {
+            String categoryId = normalizeCategory(rawCategoryId);
+            ConfigurationSection section = categoriesSection.getConfigurationSection(rawCategoryId);
+            String displayName = section == null ? "" : blankToEmpty(section.getString("displayName"));
+            String icon = section == null ? "" : blankToEmpty(section.getString("icon"));
+            categoryDefinitionsById.put(categoryId, new CategoryDefinition(
+                    categoryId,
+                    displayName.isBlank() ? humanizeToken(categoryId) : displayName,
+                    icon.isBlank() ? fallbackCategoryIcon(categoryId) : icon
+            ));
+        }
+
+        categoryDefinitionsById.putIfAbsent("unsorted", new CategoryDefinition("unsorted", "Unsorted", "BARRIER"));
+    }
+
     private String normalizeCategory(String categoryId) {
-        return categoryId == null || categoryId.isBlank() ? "unsorted" : categoryId;
+        return categoryId == null || categoryId.isBlank() ? "unsorted" : categoryId.trim().toLowerCase(Locale.ROOT);
     }
 
     private List<FlattenedMarketIndexEntry> buildSeedEntriesFromDefinitions() {
@@ -235,7 +291,7 @@ public final class FlattenedMarketIndexService {
                         duplicates.add(material);
                     }
 
-                    vanillaAssignments.put(material, categoryId);
+                    vanillaAssignments.put(material, normalizeCategory(categoryId));
                 }
             }
         }
@@ -337,6 +393,23 @@ public final class FlattenedMarketIndexService {
         };
     }
 
+    private String fallbackCategoryIcon(String categoryId) {
+        return switch (normalizeCategory(categoryId)) {
+            case "building_blocks" -> "STONE";
+            case "decorative_blocks" -> "FLOWER_POT";
+            case "tools" -> "DIAMOND_PICKAXE";
+            case "weapons" -> "DIAMOND_SWORD";
+            case "armor" -> "DIAMOND_CHESTPLATE";
+            case "enchanted_books" -> "ENCHANTED_BOOK";
+            case "food" -> "COOKED_BEEF";
+            case "farming" -> "WHEAT";
+            case "ores" -> "DIAMOND_ORE";
+            case "redstone" -> "REDSTONE";
+            case "unsorted" -> "BARRIER";
+            default -> "CHEST";
+        };
+    }
+
     private String normalize(String input) {
         return input.trim().toLowerCase(Locale.ROOT);
     }
@@ -346,7 +419,7 @@ public final class FlattenedMarketIndexService {
     }
 
     private String humanizeToken(String token) {
-        String[] parts = token.toLowerCase(Locale.ROOT).split("[_\s]+");
+        String[] parts = token.toLowerCase(Locale.ROOT).split("[_\\s]+", -1);
         StringBuilder builder = new StringBuilder();
 
         for (String part : parts) {

@@ -76,6 +76,16 @@ public final class SQLiteRecommendationHistoryStore {
         }
     }
 
+    public List<YearMonth> getMonthsWithData(String marketKey) {
+        synchronized (lock) {
+            return byMarketKey.getOrDefault(marketKey, List.of()).stream()
+                    .map(point -> YearMonth.from(toLocalDate(point.recordedAtEpochMillis())))
+                    .distinct()
+                    .sorted(Comparator.reverseOrder())
+                    .toList();
+        }
+    }
+
     private String dailyId(String marketKey, long recordedAtEpochMillis) {
         return marketKey + "|" + toLocalDate(recordedAtEpochMillis);
     }

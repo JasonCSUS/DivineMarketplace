@@ -10,8 +10,8 @@ import java.util.UUID;
  * Audit subsystem entry point.
  *
  * Mandatory behavior:
- * - all market actions must be written to binary admin history
- * - sales/listings/claims are split into separate files for easier querying
+ * - all market actions must be written to SQLite admin history
+ * - sales/listings/claims are split into separate SQLite tables for easier querying
  */
 public interface AdminHistoryService {
 

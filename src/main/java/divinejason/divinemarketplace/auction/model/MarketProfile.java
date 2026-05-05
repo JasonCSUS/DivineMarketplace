@@ -7,10 +7,10 @@ package divinejason.divinemarketplace.auction.model;
  * - temporary output from MarketProfileCalculator during recalculation
  * - not a persisted runtime cache file
  * - used to keep recommendation math readable even though recommended prices are
- *   ultimately written to market_prices.csv
+ *   ultimately written to SQLite market_prices storage
  *
  * Important:
- * - this class is intentionally kept even though market_profiles.bin has been removed
+ * - this class is intentionally kept even though legacy market profile binary cache has been removed
  * - storage/repository classes that used to persist it are now legacy deletion candidates
  */
 public record MarketProfile(

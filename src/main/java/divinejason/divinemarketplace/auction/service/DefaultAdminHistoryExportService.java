@@ -15,7 +15,7 @@ import java.util.Optional;
 import java.util.UUID;
 
 /**
- * Writes human-readable export files from binary admin history.
+ * Writes human-readable export files from SQLite admin history.
  *
  * Pure-Java design:
  * - receives already-built services and output path via constructor

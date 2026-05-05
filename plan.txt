@@ -1,514 +1,190 @@
 DivineMarketplace plan
 ======================
 
-This file is an outline of what each major part of the plugin does and how it does it.
-It is intentionally higher level than file-specific TODO comments.
+Current implementation baseline (May 2026)
+------------------------------------------
+- Target platform: Minecraft/Paper 1.21.11 using Paper API 26.1.2.
+- Runtime market state is SQLite-backed in `plugins/DivineMarketplace/data/market.db`.
+- Legacy `.bin`, binary-cache, and owner-hash claim-file storage notes are obsolete.
+- Player GUI/chat state is intentionally sharded by player UUID in memory so many players can use the marketplace at the same time. This is UI/session sharding, not separate claim persistence files.
+- Item claims, money claims, active listings, sales history, admin audit history, market index, recommendations, price history, custom enchant metadata, custom item overrides, and small runtime state values all live in SQLite tables.
+- Text YAML files still matter as bootstrap/editable definition sources: `config.yml`, `category_config.yml`, `categories/*.yml`, `custom/custom_items.yml`, `custom/custom_enchants.yml`, and `menu.yml`.
 
-1. Startup / setup layer
-------------------------
-Purpose:
-- create missing folders/files/defaults on first startup
-- generate admin-facing helper files such as permissions.txt
-- leave runtime database file intact if it already exists
-
-How it works:
-- main plugin class calls PluginFileInitializer first
-- setup layer creates any missing config/default/log/data files
-- config/data source/registry classes only parse/load existing files
-- on first boot, missing config.yml and category_config.yml are generated from defaults
-- on future boots, category_config.yml is read and categories/<categoryId>.yml is ensured for every configured category
-- missing built-in categories get built-in default mapping files
-- missing non-built-in categories get blank files with:
-  categoryId: <id>
-  items:
-
-2. Main config layer
+1. Startup and setup
 --------------------
 Purpose:
-- represent the global plugin behavior/settings from config.yml
-- make those settings accessible everywhere without constructor spam
+- create missing plugin folders and defaults on first startup
+- preserve existing runtime database state
+- copy readable admin helper files such as `permissions.txt` from bundled defaults
 
-How it works:
-- MainConfigLoader reads and validates config.yml
-- MainConfig is the typed runtime representation of config.yml only
-- ConfigService stores the current MainConfig as a singleton-style access point
-- most classes should use specific helper getters instead of drilling through a deep config tree
+Current behavior:
+- `PluginFileInitializer` creates the live folder layout and copies missing bundled defaults
+- `MainConfigLoader` parses `config.yml` into `MainConfig`
+- `ConfigService` exposes cached config helpers
+- `MenuVisualConfigLoader` loads and validates editable GUI layout/visuals from `menu.yml`
+- `/market reload` reloads runtime config/data and refreshes the menu renderer without registering duplicate listeners
 
-Money rule:
-- internal prices and balances are stored as integer hundredths
-- convert to decimal only at the display/Vault boundary
-
-3. Config / definition layer
-----------------------------
+2. Runtime storage
+------------------
 Purpose:
-- define categories
-- define vanilla/default item placement
-- define custom item placement
-- define custom enchant browse metadata
-- define plugin behavior/settings
+- keep active market state durable without custom binary file maintenance
 
-How it works:
-- config.yml = behavior/settings/backend choices
-- category_config.yml = top-level category definitions
-- categories/<category>.yml = vanilla/default item mappings for that category
-- custom/custom_items.yml = custom item definitions
-- custom/custom_enchants.yml = custom enchant definitions/overrides
+Current SQLite tables:
+- `listings`
+- `item_claims`
+- `money_claims`
+- `sales`
+- `admin_sales`
+- `admin_listings`
+- `admin_claims`
+- `market_index`
+- `market_prices`
+- `price_history`
+- `runtime_state`
+- `custom_enchants`
+- `custom_item_overrides`
 
-Current icon format truth:
-- top-level category icons use only:
-  - MATERIAL
-  - MATERIAL:FLOAT_MODEL_DATA
-- examples: "STONE" or "STICK:714.0"
-- Java-style float suffixes like F should not appear in config
+Rules:
+- active listings are not size-purged as cache data; they are live market state
+- claim cleanup is based on SQLite database pressure and abandoned claim age
+- admin history and recent player-facing sales history may be FIFO-purged by configured limits
+- write flows that touch multiple stores should use rollback helpers where practical
 
-4. Item resolution layer
-------------------------
+3. Item identity and definitions
+--------------------------------
 Purpose:
-- resolve a raw ItemStack into stable market-facing identity and behavior
+- resolve a raw `ItemStack` into one market-facing identity and behavior set
 
-How it works:
-- item resolver determines broad item behavior:
-  - custom item
-  - enchanted book
-  - package/container
-  - vanilla/default item
-  - unresolved/weird item
-- the final resolved output carries:
-  - marketKey
-  - marketDisplayName
-  - categoryId
-  - optional itemType
-  - recommendationEnabled
-  - market history / training participation
-  - browse visibility
-  - review severity
-  - enchant map when relevant
+Resolved identity contains:
+- `marketKey` for stable internal grouping
+- `marketDisplayName` for player-facing labels
+- `categoryId`
+- optional `itemType` for custom items
+- recommendation/history/training flags
+- browse visibility
+- review severity
+- enchant map when relevant
 
-5. Listing layer
+Current custom-item direction:
+- known config/definition files can seed custom item behavior
+- runtime auto-discovered or admin-defined custom items write to SQLite-backed `market_index`
+- category display names/icons/order come from `category_config.yml`; raw category ids remain internal command/storage tokens
+- unknown/flagged custom item metadata should still be logged to readable files under `logs/` so server owners can inspect discoveries from the server computer
+- newly discovered custom items default to `unsorted`, require admin review, and are excluded from recommendation training until confirmed
+
+4. Listing flow
+---------------
+Purpose:
+- let players sell a quantity from the item currently held in main hand
+
+Current behavior:
+- `/market list` or the GUI list button closes the menu and prompts in chat for `quantity unitPrice`
+- chat prompt quantity tokens are exact integers, `stack`, and `all`
+- `/market list <quantity> <unitPrice>` remains available as a direct command path with exact numeric quantity scope
+- the server re-reads the live main-hand item before listing
+- the requested amount clamps to the live main-hand stack, not matching stacks elsewhere in inventory
+- the item is removed and verified before the listing is created or merged
+- listing result objects report structured success/failure to commands and GUI prompts
+
+5. Purchase flow
 ----------------
 Purpose:
-- represent active market entries for sale
+- safely transfer money to seller claims and purchased items to buyer claims
 
-How it works:
-- v1 listing uses one held item / one explicit source stack only
-- on confirm, server re-reads the real item from inventory
-- server validates quantity and unit price
-- server removes the item, verifies removal, reserves it, then creates or merges the listing
-- listings.bin stores active listings only
-- listing stores:
-  - listingId
-  - sellerUuid
-  - listedItemSnapshot
-  - amount
-  - marketKey
-  - marketDisplayName
-  - unitPrice
-  - listedAtEpochMillis
-  - listingDurationMillis
-- total price is derived: unitPrice * amount
-- expiration is derived: listedAtEpochMillis + listingDurationMillis
-- if mergeable stock is added to an active listing, amount increases and listedAtEpochMillis is bumped to the newest list time
-- partial buying is supported by reducing amount
-- when amount reaches zero, the listing is removed from listings.bin
+Current behavior:
+- buyers cannot buy their own listings
+- normal buyers see quantity controls and confirm purchase in item detail
+- owners see inspect/cancel controls, not buy controls
+- admins viewing someone else's listing see buyer controls plus admin cancel
+- purchases require either a mergeable buyer claim or an open claim slot before money is withdrawn
+- purchased items are routed to buyer item claims, not direct inventory delivery
+- seller proceeds accumulate in money claims and are paid through Vault when claimed
 
-6. Claim layer
---------------
+6. Claim flow
+-------------
 Purpose:
-- safely hold items or money owed to players after market actions
+- safely hold owed items/money until the player is ready to claim or relist
 
-How it works:
-- item claims and money claims are stored separately in separate bins
+Current behavior:
+- item claims and money claims are separate SQLite tables
+- item claims merge similar items for the same owner when possible
+- claim detail supports:
+  - claim one safe stack-sized chunk
+  - claim as much as safely fits in storage inventory contents
+  - relist through chat input for `quantity unitPrice`
+- claim actions return structured result objects so GUI/commands can show exact claimed amounts and remaining claim amount
+- money claims pay accumulated seller earnings through Vault and return exact payout results
+- relist-from-claim creates/merges a listing from the stored claim snapshot and decrements the claim only after successful listing persistence
 
-Item claims:
-- stored in item_claims.bin
-- model stores:
-  - claimId
-  - ownerUuid
-  - claimItemSnapshot
-  - amount
-  - createdAtEpochMillis
-- similar claims for the same owner may merge
-- merging refreshes createdAtEpochMillis to the newest merge time
-- left click claims one safe stack-sized chunk
-- shift-click claims as much as safely fits in inventory
-- claim is removed when amount reaches zero
-- abandonment is derived from createdAtEpochMillis
-- if item_claims.bin exceeds its soft size limit, only abandoned claims may be purged, oldest abandoned first
-- if nothing is abandoned, do not purge
-
-Money claims:
-- stored in money_claims.bin
-- model stores:
-  - ownerUuid
-  - amount
-- one running money balance exists per player
-- sale proceeds increase the balance
-- /market claim earnings pays the balance out through Vault
-- successful payout drains the stored amount to zero and deletes the record
-- missing record means zero balance
-
-7. History / audit layer
-------------------------
-Purpose:
-- record market actions for admin review, player-facing history, and price training
-
-How it works:
-- binary admin history is mandatory for all market actions
-- admin audit storage is split by purpose:
-  - admin_sales.bin
-  - admin_listings.bin
-  - admin_claims.bin
-- these admin files are cleaned FIFO when their configured size limits are reached
-- player-facing market sale history is stored separately in sales.bin
-- sales.bin holds recent exact sales only and is also cleaned FIFO by size
-- admins can inspect history in game and export readable text reports from binary history
-
-8. Recommendation layer
------------------------
-Purpose:
-- maintain suggested prices for market groups
-
-How it works:
-- prices are based on training data only and persisted to market_prices.csv
-- SaleRecord is the player-facing exact-sales dataset and also the source dataset for training
-- every SaleRecord is player-facing history by definition
-- SaleRecord stores:
-  - marketKey
-  - marketDisplayName
-  - soldItemSnapshot
-  - amountPurchased
-  - unitPrice
-  - soldAtEpochMillis
-  - marketTrainingParticipation
-- total sale price is derived: unitPrice * amountPurchased
-- mixed enchanted books remain in sale history but are marked EXCLUDED from training
-- packages/bundles do not enter sale history/training and do not receive recommendations
-- recalculation should be infrequent and configurable
-
-10. Market calculator + scheduler
----------------------------------
-Purpose:
-- calculate per-market-key economics values without heavy Paper coupling
-- run recommendation recalculation slowly over many ticks
-- keep recommendations responsive without stalling server ticks
-
-How it works:
-- MarketProfileCalculator is mostly pure Java
-- it reads recent SaleRecord data + active Listing data and may return an in-memory MarketProfile result
-- that MarketProfile is a temporary calculation object, not a persisted binary cache record
-- final recommended prices should be written to market_prices.csv
-- it should use simple averages, simple trend slope/fitness, and clamped rule-based movement
-- it should avoid calculus and rely mostly on algebra + simple regression
-- MarketRecalculationService should:
-  - compare the current day against a tiny global last-recalc-day state value
-  - build a queue of eligible market keys for the daily pass
-  - process only a few market keys per run/tick
-  - support manual/emergency item recalculation
-
-11. Menu system layer
----------------------
-Purpose:
-- render chest GUI menus cleanly without turning the plugin into one giant listener
-- keep UI state separate from business logic
-- reuse the same layouts for main navigation, category browsing, listings, claims,
-  history, and item detail flows
-
-How it works:
-- MenuView defines the current menu screen
-- MenuSession stores per-player UI state only
-- MenuSessionManager stores/retrieves sessions by player UUID
-- MarketMenuHolder identifies plugin-owned inventories safely
-- MenuRenderer builds inventories from MenuSession + menu-ready data
-- MenuDataFacade gathers menu-ready data from underlying services/stores
-- MenuItemFactory centralizes GUI item creation, lore, filler panes, and buttons
-- MenuClickRouter translates clicks into state transitions or service calls
-- MarketMenuListener is a thin Paper listener that cancels chest behavior and routes clicks
-
-Locked v1 menu flow:
-- `/market` -> Main Menu
-- `/market all` -> Listing Browser with no marketKey filter, sorted newest first
-- `/market <category>` -> Category Browser
-- `/market search <query>` -> Search Results
-- clicking a market group -> Listing Browser filtered to one marketKey
-- clicking a listing -> Item Detail / Buy / Cancel
-- `/market claim` -> Claims
-- `/market claim earnings` -> direct money payout
-
-Locked v1 menu rules:
-- menu titles should be the relevant current menu name
-- empty usable slots stay empty
-- Search is command-driven in v1
-- listing detail screen shows cancel button only for owner or .admin
-- All Listings should default to newest-first sorting
-- history screens are simple paged chest views, not graphs
-
-12. Core service + persistence pseudocode layer
------------------------------------------------
-Purpose:
-- freeze core behaviors before applying Paper API
-- keep business logic separate from listeners, menus, and commands
-- make file-by-file Paper implementation cleaner and less monster-like
-
-How it works:
-- persistence interfaces define how each binary file is read/written/cleaned
-- service interfaces define listing, purchase, claim, history, search, and audit flows
-- commands stay thin and delegate into services/controllers
-- menu layer stays a view/router around service behavior
-
-Implementation order after this pseudocode pass:
-1. binary stores
-2. core business services
-3. menu renderer/router/listener
-4. command layer
-5. final plugin wiring
-
-13. Config bootstrap + parse/cache layer
-----------------------------------------
-Purpose:
-- create exact live config files from shipped resource defaults on first run
-- separate bootstrap file generation from runtime config parsing
-- make global config values available everywhere through one cached object
-
-How it works:
-- PluginDirectoryLayout defines live plugin-folder paths
-- PluginFileInitializer creates missing folders and copies missing shipped defaults
-- category_config.yml is copied as an exact default template
-- categories/<category>.yml live files are then ensured from the copied category_config.yml
-- MainConfigLoader parses plugins/DivineMarketplace/config.yml into MainConfig
-- ConfigService caches the parsed MainConfig and exposes specific helper getters
-
-13. Exact bundled default category files
-----------------------------------------
-Purpose:
-- ship real default category mappings instead of loose examples
-- make first-run copied category files match the intended vanilla browsing taxonomy
-- use runtime validation only as a safety net for misses, duplicates, and invalid names
-
-How it works:
-- built-in category ids live in `defaults/category_config.yml`
-- exact built-in category mapping files live in `defaults/categories/<categoryId>.yml`
-- PluginFileInitializer copies exact bundled category files when a built-in category file is missing
-- custom category ids added later still get blank generated files
-- if bundled defaults are copied during bootstrap, the initializer validates the built-in category coverage against allowed Material values and warns about anything uncategorized
-
-Ores category note
-------------------
-The shipped vanilla defaults should include an `ores` category for the major
-ore families and their related progression items:
-- ore blocks
-- raw ore items / raw ore blocks
-- ingots / nuggets / gems
-- storage blocks
-
-This keeps broad categories like `materials` and `redstone` from becoming too
-overloaded with core mining economy items.
-
-13. Real startup wiring
------------------------
-Purpose:
-- make the plugin boot cleanly before deeper market logic is implemented
-
-How it works:
-- DivineMarketplace onEnable first runs PluginFileInitializer
-- PluginFileInitializer creates/copies the live plugin-folder files
-- MainConfigLoader then reads the live config.yml
-- ConfigService caches the parsed MainConfig
-- if bootstrap or config loading fails, the plugin disables itself cleanly
-
-14. Binary persistence implementation notes
--------------------------------------------
-Purpose:
-- turn the binary store scaffolds into real low-risk Java file handlers
-
-Current implementation direction:
-- use plain Java DataInputStream/DataOutputStream file formats
-- use Paper ItemStack byte serialization for item snapshots
-- avoid Bukkit object streams
-- prefer simple full-read / mutate / atomic-rewrite logic first
-- optimize later only if profiling shows real need
-
-Item claims sharding note
-------------------------
-Item claims should be sharded by owner UUID hash rather than stored as one
-giant monolithic file or sharded by date.
-
-Why:
-- normal claim actions are owner-centric
-- one player action should usually touch only one shard
-- cleanup can use shard metadata to skip obviously-young shards
-
-Cleanup policy:
-- run only when the higher-level runtime chooses to call it
-- if total shard bytes exceed the configured soft max, only shards whose
-  oldest claim is old enough to be abandoned are candidates
-- sort candidate shards by oldest lastActivityAt
-- purge until total bytes are at or below (max - 10% of max), not merely
-  just under the cap
-
-Main-hand listing refinement
----------------------------
-The default v1 listing flow should mutate only the main-hand slot.
-
-Why:
-- safer UX
-- less ambiguity
-- simpler rollback
-- avoids the plugin choosing some other similar stack in storage
-
-Requested quantity should clamp down to the current main-hand stack amount
-rather than searching elsewhere in inventory.
-
-Listing result object note
---------------------------
-Listing creation should return a structured result object rather than forcing
-commands/menus to inspect exception text.
-
-Why:
-- player feedback
-- debugging
-- cleaner command/menu integration
-
-Also, Listing should store categoryId directly so category browsing and index
-refreshes do not have to re-resolve item identity later.
-
-Claim relist note
------------------
-Item claims should support a direct relist flow.
-
-Why:
-- a player may cancel a listing and want to repost it at a different price
-- routing the item back through inventory first is extra friction and extra risk
-
-Intended flow:
-- ClaimService loads the item claim
-- requested relist quantity clamps to claim amount
-- listing is created from the stored claim snapshot
-- only after success is the claim decremented or removed
-- the relist result is returned in structured form for player messaging and debugging
-
-Custom auto-definition write-through note
-----------------------------------------
-Unknown custom items should not remain runtime-only provisional identities.
-
-Instead:
-- ItemIdentityResolver should hand the discovery off to a registry/data-source helper
-- the helper should upsert a real definition into custom_items.yml
-- the new entry should default to categoryId = unsorted
-- later sort/define commands should reuse the same upsert path for proactive edits
-
-Package rule:
-- only filled bundles/shulkers should go down the package path
-- empty ones should resolve like normal items
-\n
-17. ClaimService implementation direction
+7. History, auditing, and recommendations
 -----------------------------------------
 Purpose:
-- turn item claims and money claims into real user actions
+- separate admin audit history, player-facing sale history, and training data
 
-Current best concrete shape:
-- DefaultClaimService should use storage-contents insertion logic for item delivery
-- relist-from-claim should use the stored claim snapshot and only decrement the
-  claim after listing success
-- claim earnings should use an injected Vault Economy implementation rather than
-  plugin lookup inside the service
-- because normal listing is main-hand only, relist-from-claim may temporarily
-  duplicate some listing-creation logic until a shared helper exists
-\n
-20. Command layer direction
---------------------------
+Current behavior:
+- admin history is mandatory for market actions and is stored in dedicated SQLite admin tables
+- player-facing sale history is stored as `SaleRecord` entries in SQLite `sales`
+- `InMemorySaleHistoryIndex` preloads recent sales for fast command/GUI reads
+- normal sale history uses exact market-key matching
+- enchanted-book sale history uses component matching:
+  - single-enchant book history includes mixed-book sales containing that enchant+level
+  - mixed-book history includes exact mixed sales plus matching single-enchant component sales
+- mixed enchanted books remain player-visible in sale history but are excluded from recommendation training
+- price history is stored as compact daily recommendation points in SQLite `price_history`
+- price-history GUI month navigation only shows months that actually have data
+- sale/price history GUI timestamps are rendered as simple server-local `yyyy-MM-dd HH:mm` values, not raw epoch milliseconds
+- price history remains disabled for mixed-enchant book groups because they do not train recommendations
+
+8. GUI and player input
+-----------------------
 Purpose:
-- provide good UX without turning the command layer into a second business-logic layer
+- make `/market` the primary player experience while keeping text commands available
 
-Current direction:
-- use Paper BasicCommand for `/market`
-- keep one player-facing command entry point and delegate admin subcommands internally
-- use rich text sender messaging for readable success/failure output
-- suggest category ids, market display names, and market keys based on audience:
-  - players: category ids + market display names
-  - admins: category ids + market display names + market keys for maintenance commands
-- unfinished menu-heavy/admin-maintenance commands can be recognized with friendly placeholder responses until their services are complete
+Current behavior:
+- `/market` opens the main GUI
+- `/market all`, `/market <category>`, and `/market search <query>` open the equivalent paginated GUI views instead of printing first-page-only chat lists
+- GUI search, listing, and relisting use short-lived per-player chat prompts because inventory GUIs are poor text/price-entry surfaces
+- prompt state is separate from menu sessions and keyed by player UUID
+- menu sessions/actions are also keyed by player UUID, keeping simultaneous players isolated
+- menu actions store only ids/tokens and always re-fetch live business data before mutation
+- pagination loads `pageSize + 1` so Next only renders when another page exists
+- price-history month navigation uses only months with stored history data
+- `menu.yml` validation warns and falls back on invalid slots, duplicate slots, invalid materials, and invalid custom model data
 
+9. Commands
+-----------
+Player-facing:
+- `/market` opens the main GUI
+- `/market all` opens the all-listings GUI
+- `/market <category>` opens that category GUI
+- `/market enchanted_books [group]` opens the enchanted-book category/group GUI
+- `/market search [query]` opens a chat search prompt or direct search-results GUI
+- `/market list [quantity unitPrice]` starts chat listing or uses the exact direct numeric command path
+- `/market pricecheck` or `/market pc` prints a held-item recommendation
+- `/market claim` opens the claims GUI
+- `/market claim earnings` claims seller earnings directly
+- `/market history <display name> [menu]` prints recent sale history or opens the sale-history GUI
+- `/market pricehistory <display name> [menu]` prints latest-month recommendation history or opens the price-history GUI
 
-Legacy deletion marks
----------------------
-These files are now decoupled from the live plugin and are safe deletion candidates:
-- auction/persistence/BinaryMarketProfileStore.java
-- auction/repository/MarketProfileRepository.java
+Admin-facing:
+- admin commands remain behind focused handlers under `MarketAdminCommand`
+- player suggestions should prefer display names
+- admin suggestions may expose market keys where maintenance needs exact ids
 
-This file intentionally stays:
-- auction/model/MarketProfile.java
-because it still makes sense as a temporary calculation object for the recommendation layer.
+10. Alpha cutoff goals
+----------------------
+Done/current for alpha:
+- SQLite runtime storage path
+- GUI browsing and detail views
+- chat input for search/list/relist
+- pricecheck command for held-item recommendations
+- claim results with exact player feedback
+- browse/search commands route to paginated GUI states with useful back-stack context
+- sale-history and price-history GUI paths from item detail and command `menu` shortcuts, with data-aware price-history month navigation
+- component-aware enchanted-book sale history
 
-
-
-21. Price recommendation + browse slice
----------------------------------------
-Purpose:
-- finish the CSV-backed recommendation path
-- replace placeholder browse/search behavior with real text-command data
-
-Current direction:
-- preload sales history into memory once at startup
-- keep recommended prices in market_prices.csv and load them into memory
-- use MarketProfileCalculator only as temporary in-memory math
-- schedule async recalculation jobs for one item or all items
-- rebuild category/market-group browse summaries from market_index.csv plus active listings
-- register /market for real in the main plugin
-
-SQLite migration note
---------------------
-Use one local SQLite database for live runtime market state.
-
-Why:
-- less custom binary file maintenance
-- better write batching/transactions
-- easier future server/tool integration
-
-Transitional implementation rule:
-- keep existing store class names during migration to avoid wide service churn
-- move internals to SQLite first
-- rename classes later once the migration stabilizes
-
-
-Naming cleanup note
--------------------
-Now that runtime storage is database-backed, live store class names should stop
-using the old Binary* prefix. Use SQLite*Store for active implementations and
-remove the stale Binary* files afterward.
-
-
-Flattened/runtime market data
------------------------------
-The remaining runtime market data layer is now expected to live in SQLite too.
-
-Direction:
-- flattened market index persists in SQLite table `market_index`
-- current recommended prices persist in SQLite table `market_prices`
-- compact daily price history persists in SQLite table `price_history`
-- category/custom definition files are still read as source definitions, then flattened into the runtime DB layer
-
-Final runtime wiring cleanup
-----------------------------
-Goal:
-- finish removing stale runtime references to the old CSV/YAML market data path
-
-Direction:
-- runtime browse/search/category/admin lookups should flow through SQLite-backed market index data
-- bootstrap YAML/category/custom files are only seed inputs when the DB table is empty
-- custom item registry writes should update SQLite-backed market index entries
-- admin sort/define should update the SQLite runtime index directly
-
-
-Fix pass
---------
-- plugin.yml api-version should use the Minecraft API version, not the Paper artifact version
-- history export flags now require history.export permission
-- raw inspect snapshot writing now obeys config
-- provisional custom detections can now auto-log metadata snapshots when configured
-
-
-- plugin.yml uses Minecraft api-version 1.21 and keeps inspect/custom override permissions under the permissions block
-- provisional unknown custom items are now deduped when metadata snapshots are auto-written
-- provisional unknown custom items now stay unsorted/review-heavy and are excluded from player-facing market history/training
-- custom registry now guards against itemType/material+CMD collisions instead of silently overwriting
-- category/subcategory quantity displays are explicitly labeled as qty in text output
+Known follow-up scans before hands-on server testing:
+- inspect command output for any remaining internal market-key leaks to normal players
+- check all admin placeholders and decide whether they are acceptable for alpha or should be hidden
+- manually verify `menu.yml` slot defaults after applying patches
+- keep `plugin.yml`, `defaults/permissions.txt`, and configured tier permission examples in sync

@@ -1,0 +1,23 @@
+package divinejason.divinemarketplace.menu;
+
+import org.bukkit.inventory.Inventory;
+
+import java.util.Collections;
+import java.util.LinkedHashMap;
+import java.util.Map;
+
+/**
+ * Inventory plus the exact slot-action map generated while rendering it.
+ */
+public record MenuRenderResult(
+        Inventory inventory,
+        Map<Integer, MenuAction> actionsBySlot
+) {
+    public MenuRenderResult {
+        actionsBySlot = Collections.unmodifiableMap(new LinkedHashMap<>(actionsBySlot));
+    }
+
+    public static MenuRenderResult empty(Inventory inventory) {
+        return new MenuRenderResult(inventory, Map.of());
+    }
+}

@@ -44,6 +44,9 @@ listingPolicies:
 claims:
   claimMenuUsesSafeChunkRedemption: true
   shiftClickClaimsAsMuchAsSafelyFits: true
+  # Buyers can purchase into an existing mergeable claim, or into one free claim slot.
+  # If all claim slots are occupied, the GUI should close and tell them to empty claim storage first.
+  maxActiveItemClaims: 54
 
 packages:
   previewMode: "EXACT" # EXACT or SIMPLIFIED

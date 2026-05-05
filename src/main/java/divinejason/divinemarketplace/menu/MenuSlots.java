@@ -17,6 +17,7 @@ public final class MenuSlots {
     public static final int MAIN_MY_LISTINGS = 0;
     public static final int MAIN_CLAIMS = 9;
     public static final int MAIN_CLAIM_EARNINGS = 18;
+    public static final int MAIN_LIST_HELD_ITEM = 4;
     public static final int MAIN_SEARCH = 8;
     public static final int MAIN_ALL_LISTINGS = 49;
 
@@ -25,8 +26,15 @@ public final class MenuSlots {
     public static final int ITEM_DETAIL_INCREASE = 23;
     public static final int ITEM_DETAIL_CONFIRM = 31;
     public static final int ITEM_DETAIL_CANCEL = 40;
+    public static final int ITEM_DETAIL_SALE_HISTORY = 37;
+    public static final int ITEM_DETAIL_PRICE_HISTORY = 43;
+    public static final int CLAIM_DETAIL_RELIST = 22;
+    public static final int CLAIM_DETAIL_ONE_CHUNK = 31;
+    public static final int CLAIM_DETAIL_AS_MUCH_AS_FITS = 40;
     public static final int CLAIMS_EARNINGS = 8;
-    public static final int PRICE_HISTORY_MONTH_CONTEXT = 1;
+    public static final int PRICE_HISTORY_MONTH_CONTEXT = 4;
+    public static final int PRICE_HISTORY_PREVIOUS_MONTH = 3;
+    public static final int PRICE_HISTORY_NEXT_MONTH = 5;
 
     public static final int[] MAIN_CATEGORY_SLOTS = {
             11, 12, 13, 14, 15,

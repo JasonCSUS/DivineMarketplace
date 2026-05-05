@@ -14,7 +14,7 @@ import java.util.List;
  *
  * Current role:
  * - produces an in-memory MarketProfile object during recalculation
- * - does not assume persisted market_profiles.bin storage exists
+ * - does not assume persisted legacy market profile binary cache storage exists
  * - lets recommendation math stay readable even though final recommended prices
  *   are persisted elsewhere
  */

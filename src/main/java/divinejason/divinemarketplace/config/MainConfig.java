@@ -28,7 +28,7 @@ public record MainConfig(
     public record ListingPolicies(ListingPolicy defaults, List<ListingTier> tiers) {}
     public record ListingPolicy(int maxListings, int listingDurationDays) {}
     public record ListingTier(String permission, int maxListings, int listingDurationDays) {}
-    public record Claims(boolean claimMenuUsesSafeChunkRedemption, boolean shiftClickClaimsAsMuchAsSafelyFits) {}
+    public record Claims(boolean claimMenuUsesSafeChunkRedemption, boolean shiftClickClaimsAsMuchAsSafelyFits, int maxActiveItemClaims) {}
     public record Packages(String previewMode, boolean keepExactPayloadInFileStorage, boolean keepExactPayloadCachedInMemory) {}
     public record Market(int recalcIntervalHours, int perItemMinimumRecalcHours, int recalcItemsPerRun, int saleLookbackDays, Thresholds thresholds, Adjustment adjustment, Trend trend) {}
     public record Thresholds(double samePercent, double smallAdjustmentPercent, double mediumAdjustmentPercent, double majorOverpricedPercent, double majorUnderpricedPercent) {}

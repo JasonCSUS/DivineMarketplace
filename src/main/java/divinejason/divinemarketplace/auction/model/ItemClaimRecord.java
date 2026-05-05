@@ -5,7 +5,7 @@ import java.util.UUID;
 import org.bukkit.inventory.ItemStack;
 
 /**
- * Durable item claim record stored in item_claims.bin.
+ * Durable item claim record persisted in SQLite item_claims storage.
  *
  * Locked v1 rules:
  * - item claims are separate from money claims

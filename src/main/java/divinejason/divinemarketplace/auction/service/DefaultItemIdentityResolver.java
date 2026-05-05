@@ -1,16 +1,12 @@
 package divinejason.divinemarketplace.auction.service;
 
-import divinejason.divinemarketplace.auction.model.BrowseVisibility;
-import divinejason.divinemarketplace.auction.model.CustomItemDefinition;
-import divinejason.divinemarketplace.auction.model.CustomItemDefinitionState;
-import divinejason.divinemarketplace.auction.model.CustomItemTypeExtractionResult;
-import divinejason.divinemarketplace.auction.model.MarketHistoryParticipation;
-import divinejason.divinemarketplace.auction.model.MarketTrainingParticipation;
-import divinejason.divinemarketplace.auction.model.ResolvedItemDefinition;
-import divinejason.divinemarketplace.auction.model.ReviewFlagLevel;
-import divinejason.divinemarketplace.config.ConfigService;
-import net.kyori.adventure.text.Component;
-import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.Objects;
+
 import org.bukkit.Material;
 import org.bukkit.NamespacedKey;
 import org.bukkit.block.ShulkerBox;
@@ -18,20 +14,24 @@ import org.bukkit.enchantments.Enchantment;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.BlockStateMeta;
 import org.bukkit.inventory.meta.BundleMeta;
-import org.bukkit.inventory.meta.EnchantmentStorageMeta;
 import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.inventory.meta.PotionMeta;
 import org.bukkit.potion.PotionEffect;
 import org.bukkit.potion.PotionEffectType;
 import org.bukkit.potion.PotionType;
 
-import java.util.ArrayList;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Locale;
-import java.util.Map;
-import java.util.Objects;
-import java.util.TreeMap;
+import divinejason.divinemarketplace.auction.model.BrowseVisibility;
+import divinejason.divinemarketplace.auction.model.CustomItemDefinition;
+import divinejason.divinemarketplace.auction.model.CustomItemDefinitionState;
+import divinejason.divinemarketplace.auction.model.CustomItemTypeExtractionResult;
+import divinejason.divinemarketplace.auction.model.EnchantmentDefinition;
+import divinejason.divinemarketplace.auction.model.MarketHistoryParticipation;
+import divinejason.divinemarketplace.auction.model.MarketTrainingParticipation;
+import divinejason.divinemarketplace.auction.model.ResolvedItemDefinition;
+import divinejason.divinemarketplace.auction.model.ReviewFlagLevel;
+import divinejason.divinemarketplace.config.ConfigService;
+import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
 
 public final class DefaultItemIdentityResolver implements ItemIdentityResolver {
     private static final PlainTextComponentSerializer PLAIN = PlainTextComponentSerializer.plainText();
@@ -40,17 +40,23 @@ public final class DefaultItemIdentityResolver implements ItemIdentityResolver {
     private final CustomItemRegistry customItemRegistry;
     private final CustomItemTypeExtractor customItemTypeExtractor;
     private final CustomItemMetadataLogService metadataLogService;
+    private final EnchantmentMetadataService enchantmentMetadataService;
+    private final StoredEnchantExtractor storedEnchantExtractor;
 
     public DefaultItemIdentityResolver(
             CategoryResolver categoryResolver,
             CustomItemRegistry customItemRegistry,
             CustomItemTypeExtractor customItemTypeExtractor,
-            CustomItemMetadataLogService metadataLogService
+            CustomItemMetadataLogService metadataLogService,
+            EnchantmentMetadataService enchantmentMetadataService,
+            StoredEnchantExtractor storedEnchantExtractor
     ) {
         this.categoryResolver = Objects.requireNonNull(categoryResolver, "categoryResolver");
         this.customItemRegistry = Objects.requireNonNull(customItemRegistry, "customItemRegistry");
         this.customItemTypeExtractor = Objects.requireNonNull(customItemTypeExtractor, "customItemTypeExtractor");
         this.metadataLogService = Objects.requireNonNull(metadataLogService, "metadataLogService");
+        this.enchantmentMetadataService = Objects.requireNonNull(enchantmentMetadataService, "enchantmentMetadataService");
+        this.storedEnchantExtractor = Objects.requireNonNull(storedEnchantExtractor, "storedEnchantExtractor");
     }
 
     @Override
@@ -83,10 +89,11 @@ public final class DefaultItemIdentityResolver implements ItemIdentityResolver {
             return buildCustomDefinition(itemStack, extraction);
         }
 
-        if (itemStack.getType() == Material.ENCHANTED_BOOK
-                && itemMeta instanceof EnchantmentStorageMeta storageMeta
-                && storageMeta.hasStoredEnchants()) {
-            return buildEnchantedBookDefinition(storageMeta);
+        if (itemStack.getType() == Material.ENCHANTED_BOOK) {
+            Map<Enchantment, Integer> storedEnchantments = storedEnchantExtractor.extractStoredEnchantments(itemStack);
+            if (!storedEnchantments.isEmpty()) {
+                return buildEnchantedBookDefinition(storedEnchantments);
+            }
         }
 
         if (isPotionLike(itemStack, itemMeta)) {
@@ -173,19 +180,23 @@ public final class DefaultItemIdentityResolver implements ItemIdentityResolver {
         );
     }
 
-    private ResolvedItemDefinition buildEnchantedBookDefinition(EnchantmentStorageMeta storageMeta) {
-        Map<Enchantment, Integer> stored = new TreeMap<>((left, right) -> enchantKey(left).compareTo(enchantKey(right)));
-        stored.putAll(storageMeta.getStoredEnchants());
+    private ResolvedItemDefinition buildEnchantedBookDefinition(Map<Enchantment, Integer> stored) {
         Map<String, Integer> enchantments = new LinkedHashMap<>();
+        Map<String, EnchantmentDefinition> definitions = new LinkedHashMap<>();
         for (Map.Entry<Enchantment, Integer> entry : stored.entrySet()) {
-            enchantments.put(enchantKey(entry.getKey()), entry.getValue());
+            String key = enchantKey(entry.getKey());
+            enchantments.put(key, entry.getValue());
+            definitions.put(key, enchantmentMetadataService.resolveDefinition(key));
         }
 
         boolean mixed = enchantments.size() > 1;
+        boolean hasUnrecognizedCustomEnchant = definitions.values().stream()
+                .anyMatch(definition -> definition.customEnchantment() && !definition.recognized());
         String marketKey;
         String marketDisplayName;
         boolean recommendationEnabled;
         MarketTrainingParticipation trainingParticipation;
+        ReviewFlagLevel reviewFlagLevel;
         if (mixed) {
             StringBuilder keyBuilder = new StringBuilder("enchanted_book:mixed");
             for (Map.Entry<String, Integer> entry : enchantments.entrySet()) {
@@ -195,12 +206,15 @@ public final class DefaultItemIdentityResolver implements ItemIdentityResolver {
             marketDisplayName = "Mixed Enchants";
             recommendationEnabled = false;
             trainingParticipation = MarketTrainingParticipation.EXCLUDED;
+            reviewFlagLevel = hasUnrecognizedCustomEnchant ? ReviewFlagLevel.HIGH_PRIORITY : ReviewFlagLevel.NONE;
         } else {
             Map.Entry<String, Integer> only = enchantments.entrySet().iterator().next();
+            EnchantmentDefinition definition = definitions.get(only.getKey());
             marketKey = "enchanted_book:" + only.getKey() + ":" + only.getValue();
-            marketDisplayName = humanizeToken(stripNamespace(only.getKey())) + " " + toRoman(only.getValue()) + " Book";
-            recommendationEnabled = true;
-            trainingParticipation = MarketTrainingParticipation.INCLUDED;
+            marketDisplayName = enchantDisplayName(only.getKey(), definition) + " " + toRoman(only.getValue()) + " Book";
+            recommendationEnabled = definition == null || definition.recognized();
+            trainingParticipation = recommendationEnabled ? MarketTrainingParticipation.INCLUDED : MarketTrainingParticipation.EXCLUDED;
+            reviewFlagLevel = recommendationEnabled ? ReviewFlagLevel.NONE : ReviewFlagLevel.HIGH_PRIORITY;
         }
 
         return new ResolvedItemDefinition(
@@ -212,7 +226,7 @@ public final class DefaultItemIdentityResolver implements ItemIdentityResolver {
                 MarketHistoryParticipation.INCLUDED,
                 trainingParticipation,
                 BrowseVisibility.FULLY_SORTED,
-                ReviewFlagLevel.NONE,
+                reviewFlagLevel,
                 enchantments
         );
     }
@@ -364,8 +378,7 @@ public final class DefaultItemIdentityResolver implements ItemIdentityResolver {
     }
 
     private String enchantKey(Enchantment enchantment) {
-        NamespacedKey key = enchantment.getKey();
-        return key.getNamespace() + ":" + key.getKey();
+        return storedEnchantExtractor.enchantKey(enchantment);
     }
 
     private String effectTypeKey(PotionEffectType potionEffectType) {
@@ -378,8 +391,15 @@ public final class DefaultItemIdentityResolver implements ItemIdentityResolver {
         return index >= 0 ? key.substring(index + 1) : key;
     }
 
+    private String enchantDisplayName(String enchantKey, EnchantmentDefinition definition) {
+        if (definition != null && definition.displayName() != null && !definition.displayName().isBlank()) {
+            return definition.displayName();
+        }
+        return humanizeToken(stripNamespace(enchantKey));
+    }
+
     private String humanizeToken(String token) {
-        String[] parts = token.toLowerCase(Locale.ROOT).split("[_\s]+");
+        String[] parts = token.toLowerCase(Locale.ROOT).split("[_\\s]+");
         StringBuilder builder = new StringBuilder();
         for (String part : parts) {
             if (part.isBlank()) {

@@ -1,6 +1,8 @@
 package divinejason.divinemarketplace.storage.sqlite;
 
 import java.sql.*;
+import java.io.IOException;
+import java.nio.file.Files;
 import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
@@ -184,6 +186,41 @@ public final class SQLiteStore {
         }
     }
 
+    public int deleteBatch(String tableName, Collection<String> ids) throws SQLException {
+        Objects.requireNonNull(ids, "ids");
+        if (ids.isEmpty()) return 0;
+
+        String table = qualifiedTable(tableName);
+        ensureTable(tableName);
+
+        String sql = "DELETE FROM " + table + " WHERE id = ?;";
+        try (Connection conn = connection()) {
+            boolean prevAutoCommit = conn.getAutoCommit();
+            conn.setAutoCommit(false);
+
+            try (PreparedStatement st = conn.prepareStatement(sql)) {
+                for (String id : ids) {
+                    if (id == null || id.isBlank()) continue;
+                    st.setString(1, id);
+                    st.addBatch();
+                }
+
+                int total = 0;
+                for (int r : st.executeBatch()) {
+                    if (r > 0) total += r;
+                }
+
+                conn.commit();
+                return total;
+            } catch (SQLException e) {
+                conn.rollback();
+                throw e;
+            } finally {
+                conn.setAutoCommit(prevAutoCommit);
+            }
+        }
+    }
+
     public CompletableFuture<Void> putAsync(String tableName, String id, String value) {
         return CompletableFuture.runAsync(() -> {
             try {
@@ -204,6 +241,16 @@ public final class SQLiteStore {
         }, database.getWriteExecutor());
     }
 
+    public CompletableFuture<Integer> deleteBatchAsync(String tableName, Collection<String> ids) {
+        return CompletableFuture.supplyAsync(() -> {
+            try {
+                return deleteBatch(tableName, ids);
+            } catch (SQLException e) {
+                throw new CompletionException(e);
+            }
+        }, database.getWriteExecutor());
+    }
+
     public CompletableFuture<Integer> replaceAllAsync(String tableName, Map<String, String> values) {
         return CompletableFuture.supplyAsync(() -> {
             try {
@@ -212,6 +259,15 @@ public final class SQLiteStore {
                 throw new CompletionException(e);
             }
         }, database.getWriteExecutor());
+    }
+
+
+    public long databaseFileSizeBytes() {
+        try {
+            return Files.exists(database.getFile()) ? Files.size(database.getFile()) : 0L;
+        } catch (IOException exception) {
+            throw new IllegalStateException("Failed to read SQLite database file size.", exception);
+        }
     }
 
     private Connection connection() throws SQLException {

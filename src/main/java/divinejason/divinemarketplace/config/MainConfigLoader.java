@@ -67,7 +67,8 @@ public final class MainConfigLoader {
 
         MainConfig.Claims claims = new MainConfig.Claims(
                 config.getBoolean("claims.claimMenuUsesSafeChunkRedemption", true),
-                config.getBoolean("claims.shiftClickClaimsAsMuchAsSafelyFits", true)
+                config.getBoolean("claims.shiftClickClaimsAsMuchAsSafelyFits", true),
+                positiveInt(config, "claims.maxActiveItemClaims", 54)
         );
 
         MainConfig.Packages packagesConfig = new MainConfig.Packages(

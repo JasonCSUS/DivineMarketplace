@@ -12,7 +12,9 @@ import java.util.*;
 /**
  * SQLite-backed item claim store.
  *
- * Previous shard/file semantics are replaced with a single table + in-memory cache.
+ * Claim persistence is intentionally one SQLite table. Per-player isolation for
+ * simultaneous marketplace users is handled by GUI/prompt session maps, not by
+ * splitting claim storage into owner-specific files.
  */
 public final class SQLiteItemClaimStore {
     private static final String TABLE = "item_claims";
@@ -124,12 +126,17 @@ public final class SQLiteItemClaimStore {
         }
     }
 
+    public int countAll() {
+        synchronized (lock) {
+            return cacheById.size();
+        }
+    }
+
     /**
-     * SQLite migration note:
-     * - there is no longer a dedicated claim file size to compare against
-     * - when this cleanup helper is called, it now simply purges abandoned claims
+     * Purges abandoned item claims only after an external storage-size/pressure gate decides cleanup is needed.
+     * Returns the number of removed claims so callers can warn admins when storage pressure remains actionable.
      */
-    public void purgeOldestAbandonedIfOverSoftLimit(long nowEpochMillis) {
+    public int purgeOldestAbandonedClaims(long nowEpochMillis) {
         synchronized (lock) {
             long abandonMillis = ConfigService.get().itemClaimAbandonMillis();
             List<ItemClaimRecord> abandoned = cacheById.values().stream()
@@ -137,9 +144,12 @@ public final class SQLiteItemClaimStore {
                     .sorted(Comparator.comparingLong(ItemClaimRecord::createdAtEpochMillis))
                     .toList();
 
+            int deleted = 0;
             for (ItemClaimRecord claim : abandoned) {
                 delete(claim.claimId(), claim.ownerUuid());
+                deleted++;
             }
+            return deleted;
         }
     }
 

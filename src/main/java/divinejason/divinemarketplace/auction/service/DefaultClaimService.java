@@ -2,6 +2,8 @@ package divinejason.divinemarketplace.auction.service;
 
 import divinejason.divinemarketplace.auction.model.AdminTransactionRecord;
 import divinejason.divinemarketplace.auction.model.AdminTransactionType;
+import divinejason.divinemarketplace.auction.model.ClaimItemResult;
+import divinejason.divinemarketplace.auction.model.ClaimMoneyResult;
 import divinejason.divinemarketplace.auction.model.ItemClaimRecord;
 import divinejason.divinemarketplace.auction.model.Listing;
 import divinejason.divinemarketplace.auction.model.ListingCreateFailureReason;
@@ -17,6 +19,7 @@ import org.bukkit.inventory.ItemStack;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.logging.Logger;
 
 /**
  * Concrete claim lifecycle implementation.
@@ -26,6 +29,7 @@ import java.util.UUID;
  * - item delivery now uses StorageItemDeliveryHelper instead of duplicating storage-contents logic
  */
 public final class DefaultClaimService implements ClaimService {
+    private final Logger logger = Logger.getLogger(DefaultClaimService.class.getName());
     private final SQLiteItemClaimStore itemClaimStore;
     private final SQLiteMoneyClaimStore moneyClaimStore;
     private final ItemIdentityResolver itemIdentityResolver;
@@ -56,53 +60,37 @@ public final class DefaultClaimService implements ClaimService {
     }
 
     @Override
-    public void claimOneChunk(Player player, UUID claimId) {
+    public ClaimItemResult claimOneChunk(Player player, UUID claimId) {
         requirePlayer(player);
 
-        ItemClaimRecord claim = loadOwnedClaimOrThrow(player, claimId);
-        int deliverAmount = Math.min(claim.amount(), maxPerSlot(claim.claimItemSnapshot()));
-
-        if (!storageItemDeliveryHelper.canFitAmount(player.getInventory(), claim.claimItemSnapshot(), deliverAmount)) {
-            throw new IllegalStateException("Inventory does not have enough free storage space for one safe claim chunk.");
+        ItemClaimRecord claim = loadOwnedClaim(player, claimId);
+        if (claim == null) {
+            return ClaimItemResult.failure(claimId, null, 0, "Claim was not found for this player.");
         }
 
-        storageItemDeliveryHelper.insertExactQuantity(player.getInventory(), claim.claimItemSnapshot(), deliverAmount);
-        persistClaimAfterReduction(claim, deliverAmount);
+        int deliverAmount = Math.min(claim.amount(), maxPerSlot(claim.claimItemSnapshot()));
+        if (!storageItemDeliveryHelper.canFitAmount(player.getInventory(), claim.claimItemSnapshot(), deliverAmount)) {
+            return ClaimItemResult.failure(claimId, displayNameFor(claim), deliverAmount, "Inventory does not have enough free storage space for one safe claim chunk.");
+        }
 
-        ResolvedItemDefinition resolved = itemIdentityResolver.resolve(normalizeSnapshotAmount(claim.claimItemSnapshot()));
-        adminHistoryService.recordClaim(buildItemClaimAdminRecord(
-                claim.ownerUuid(),
-                resolved,
-                deliverAmount,
-                System.currentTimeMillis(),
-                "CLAIMED",
-                "ONE_CHUNK"
-        ));
+        return deliverItemClaim(player, claim, deliverAmount, "ONE_CHUNK");
     }
 
     @Override
-    public void claimAsMuchAsFits(Player player, UUID claimId) {
+    public ClaimItemResult claimAsMuchAsFits(Player player, UUID claimId) {
         requirePlayer(player);
 
-        ItemClaimRecord claim = loadOwnedClaimOrThrow(player, claimId);
-        int deliverAmount = storageItemDeliveryHelper.maxInsertableAmount(player.getInventory(), claim.claimItemSnapshot(), claim.amount());
-
-        if (deliverAmount <= 0) {
-            throw new IllegalStateException("Inventory does not have enough free storage space to claim this item.");
+        ItemClaimRecord claim = loadOwnedClaim(player, claimId);
+        if (claim == null) {
+            return ClaimItemResult.failure(claimId, null, 0, "Claim was not found for this player.");
         }
 
-        storageItemDeliveryHelper.insertExactQuantity(player.getInventory(), claim.claimItemSnapshot(), deliverAmount);
-        persistClaimAfterReduction(claim, deliverAmount);
+        int deliverAmount = storageItemDeliveryHelper.maxInsertableAmount(player.getInventory(), claim.claimItemSnapshot(), claim.amount());
+        if (deliverAmount <= 0) {
+            return ClaimItemResult.failure(claimId, displayNameFor(claim), claim.amount(), "Inventory does not have enough free storage space to claim this item.");
+        }
 
-        ResolvedItemDefinition resolved = itemIdentityResolver.resolve(normalizeSnapshotAmount(claim.claimItemSnapshot()));
-        adminHistoryService.recordClaim(buildItemClaimAdminRecord(
-                claim.ownerUuid(),
-                resolved,
-                deliverAmount,
-                System.currentTimeMillis(),
-                "CLAIMED",
-                "AS_MUCH_AS_FITS"
-        ));
+        return deliverItemClaim(player, claim, deliverAmount, "AS_MUCH_AS_FITS");
     }
 
     @Override
@@ -133,6 +121,7 @@ public final class DefaultClaimService implements ClaimService {
 
         ListingPolicyResolver.ListingPolicy listingPolicy = listingPolicyResolver.resolve(player);
         long nowEpochMillis = System.currentTimeMillis();
+        MarketWriteTransaction transaction = new MarketWriteTransaction(logger);
 
         try {
             ListingWriteHelper.ListingWriteResult writeResult = listingWriteHelper.createOrMerge(
@@ -144,8 +133,9 @@ public final class DefaultClaimService implements ClaimService {
                     listingPolicy,
                     nowEpochMillis
             );
+            registerListingWriteRollback(transaction, writeResult);
 
-            persistClaimAfterReduction(claim, clampedQuantity);
+            persistClaimAfterReductionWithRollback(transaction, claim, clampedQuantity);
 
             adminHistoryService.recordListing(buildListingAdminRecord(
                     writeResult.listing(),
@@ -164,6 +154,8 @@ public final class DefaultClaimService implements ClaimService {
                     "CLAIM_TO_LISTING"
             ));
 
+            transaction.commit();
+
             return ListingCreateResult.success(
                     writeResult.listing().listingId(),
                     writeResult.mergedIntoExisting(),
@@ -174,37 +166,89 @@ public final class DefaultClaimService implements ClaimService {
                     writeResult.listing().categoryId()
             );
         } catch (ListingWriteHelper.ListingWriteException exception) {
+            transaction.rollbackQuietly();
             return ListingCreateResult.failure(exception.failureReason(), quantity, clampedQuantity, exception.getMessage());
         } catch (RuntimeException exception) {
+            transaction.rollbackQuietly();
             return ListingCreateResult.failure(ListingCreateFailureReason.INTERNAL_ERROR, quantity, clampedQuantity, exception.getMessage());
         }
     }
 
     @Override
-    public void claimEarnings(Player player) {
+    public ClaimMoneyResult claimEarnings(Player player) {
         requirePlayer(player);
 
         long pendingAmount = moneyClaimStore.getBalanceOrZero(player.getUniqueId());
         if (pendingAmount <= 0L) {
-            return;
+            return ClaimMoneyResult.success(0L);
         }
 
         double payoutAmount = pendingAmount / 100.0;
-        EconomyResponse response = economy.depositPlayer(player, payoutAmount);
-        if (!response.transactionSuccess()) {
-            throw new IllegalStateException("Vault deposit failed: " + response.errorMessage);
+        MarketWriteTransaction transaction = new MarketWriteTransaction(logger);
+
+        try {
+            moneyClaimStore.subtractFromBalance(player.getUniqueId(), pendingAmount);
+            moneyClaimStore.deleteIfZero(player.getUniqueId());
+            transaction.onRollback(() -> moneyClaimStore.addToBalance(player.getUniqueId(), pendingAmount));
+
+            EconomyResponse response = economy.depositPlayer(player, payoutAmount);
+            if (!response.transactionSuccess()) {
+                throw new IllegalStateException("Vault deposit failed: " + response.errorMessage);
+            }
+            transaction.onRollback(() -> economy.withdrawPlayer(player, payoutAmount));
+
+            adminHistoryService.recordClaim(buildMoneyClaimAdminRecord(
+                    player.getUniqueId(),
+                    pendingAmount,
+                    System.currentTimeMillis(),
+                    "PAID_OUT",
+                    "CLAIM_EARNINGS"
+            ));
+
+            transaction.commit();
+            return ClaimMoneyResult.success(pendingAmount);
+        } catch (RuntimeException exception) {
+            transaction.rollbackQuietly();
+            return ClaimMoneyResult.failure(pendingAmount, exception.getMessage());
         }
+    }
 
-        moneyClaimStore.subtractFromBalance(player.getUniqueId(), pendingAmount);
-        moneyClaimStore.deleteIfZero(player.getUniqueId());
+    /**
+     * Performs the durable reduction, admin-history write, and exact inventory
+     * insertion for item claims. The claim store is updated before inventory
+     * insertion so rollback can restore the original durable claim if any later
+     * step fails.
+     */
+    private ClaimItemResult deliverItemClaim(Player player, ItemClaimRecord claim, int deliverAmount, String reason) {
+        MarketWriteTransaction transaction = new MarketWriteTransaction(logger);
+        try {
+            persistClaimAfterReductionWithRollback(transaction, claim, deliverAmount);
 
-        adminHistoryService.recordClaim(buildMoneyClaimAdminRecord(
-                player.getUniqueId(),
-                pendingAmount,
-                System.currentTimeMillis(),
-                "PAID_OUT",
-                "CLAIM_EARNINGS"
-        ));
+            ResolvedItemDefinition resolved = itemIdentityResolver.resolve(normalizeSnapshotAmount(claim.claimItemSnapshot()));
+            adminHistoryService.recordClaim(buildItemClaimAdminRecord(
+                    claim.ownerUuid(),
+                    resolved,
+                    deliverAmount,
+                    System.currentTimeMillis(),
+                    "CLAIMED",
+                    reason
+            ));
+
+            storageItemDeliveryHelper.insertExactQuantity(player.getInventory(), claim.claimItemSnapshot(), deliverAmount);
+            transaction.commit();
+
+            int remainingAmount = Math.max(0, claim.amount() - deliverAmount);
+            return ClaimItemResult.success(
+                    claim.claimId(),
+                    resolved.marketDisplayName(),
+                    deliverAmount,
+                    deliverAmount,
+                    remainingAmount
+            );
+        } catch (RuntimeException exception) {
+            transaction.rollbackQuietly();
+            return ClaimItemResult.failure(claim.claimId(), displayNameFor(claim), deliverAmount, exception.getMessage());
+        }
     }
 
     private void requirePlayer(Player player) {
@@ -213,9 +257,22 @@ public final class DefaultClaimService implements ClaimService {
         }
     }
 
-    private ItemClaimRecord loadOwnedClaimOrThrow(Player player, UUID claimId) {
-        return itemClaimStore.findById(claimId, player.getUniqueId())
-                .orElseThrow(() -> new IllegalStateException("Claim not found for player: " + claimId));
+    private ItemClaimRecord loadOwnedClaim(Player player, UUID claimId) {
+        if (claimId == null) {
+            return null;
+        }
+        return itemClaimStore.findById(claimId, player.getUniqueId()).orElse(null);
+    }
+
+    private String displayNameFor(ItemClaimRecord claim) {
+        if (claim == null) {
+            return null;
+        }
+        try {
+            return itemIdentityResolver.resolve(normalizeSnapshotAmount(claim.claimItemSnapshot())).marketDisplayName();
+        } catch (RuntimeException ignored) {
+            return claim.claimItemSnapshot().getType().name();
+        }
     }
 
     private void persistClaimAfterReduction(ItemClaimRecord originalClaim, int deliveredAmount) {
@@ -232,6 +289,15 @@ public final class DefaultClaimService implements ClaimService {
                 remainingAmount,
                 originalClaim.createdAtEpochMillis()
         ));
+    }
+
+    private void persistClaimAfterReductionWithRollback(MarketWriteTransaction transaction, ItemClaimRecord originalClaim, int deliveredAmount) {
+        persistClaimAfterReduction(originalClaim, deliveredAmount);
+        transaction.onRollback(() -> itemClaimStore.saveOrReplace(originalClaim));
+    }
+
+    private void registerListingWriteRollback(MarketWriteTransaction transaction, ListingWriteHelper.ListingWriteResult writeResult) {
+        transaction.onRollback(() -> listingWriteHelper.rollbackWrite(writeResult));
     }
 
     private int maxPerSlot(ItemStack itemStack) {

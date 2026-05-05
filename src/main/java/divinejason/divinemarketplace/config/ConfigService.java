@@ -22,6 +22,8 @@ public final class ConfigService {
     public int adminListingsHistoryMaxMb() { return getMainConfig().storage().limits().adminListingsHistoryMaxMb(); }
     public int adminClaimsHistoryMaxMb() { return getMainConfig().storage().limits().adminClaimsHistoryMaxMb(); }
     public int itemClaimsSoftMaxMb() { return getMainConfig().storage().limits().itemClaimsSoftMaxMb(); }
+    public long itemClaimsSoftMaxBytes() { return itemClaimsSoftMaxMb() * 1_048_576L; }
+    public int itemClaimMaxActiveClaims() { return getMainConfig().claims().maxActiveItemClaims(); }
     public long marketRecalcIntervalMillis() { return getMainConfig().market().recalcIntervalHours() * 3_600_000L; }
     public long marketProfileMinimumRecalcMillis() { return getMainConfig().market().perItemMinimumRecalcHours() * 3_600_000L; }
     public int marketRecalcItemsPerRun() { return getMainConfig().market().recalcItemsPerRun(); }

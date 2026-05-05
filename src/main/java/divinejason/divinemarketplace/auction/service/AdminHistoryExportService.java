@@ -4,7 +4,7 @@ import java.nio.file.Path;
 import java.util.UUID;
 
 /**
- * Generates human-readable export files from binary admin history.
+ * Generates human-readable export files from SQLite admin history.
  */
 public interface AdminHistoryExportService {
 

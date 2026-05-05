@@ -1,5 +1,7 @@
 package divinejason.divinemarketplace.auction.service;
 
+import divinejason.divinemarketplace.auction.model.ClaimItemResult;
+import divinejason.divinemarketplace.auction.model.ClaimMoneyResult;
 import divinejason.divinemarketplace.auction.model.ListingCreateResult;
 import org.bukkit.entity.Player;
 
@@ -11,63 +13,33 @@ import java.util.UUID;
 public interface ClaimService {
 
     /**
-     * Redeem one safe stack-sized chunk from an item claim.
+     * Redeems one safe stack-sized chunk from an owned item claim.
      *
-     * PSEUDOCODE:
-     * - load claim
-     * - determine item max stack size from claimItemSnapshot
-     * - deliverAmount = min(claim.amount, itemMaxStackSize)
-     * - verify player inventory can accept the chunk
-     * - give the chunk
-     * - decrement claim amount
-     * - remove claim if amount reaches 0
-     * - write admin claim history
+     * Implementations must verify ownership, verify inventory capacity, decrement
+     * the durable claim only when delivery succeeds, and record admin claim history.
      */
-    void claimOneChunk(Player player, UUID claimId);
+    ClaimItemResult claimOneChunk(Player player, UUID claimId);
 
     /**
-     * Redeem as much of one claim as safely fits in inventory.
+     * Redeems as much of one owned claim as safely fits in the player's inventory.
      *
-     * PSEUDOCODE:
-     * - repeatedly attempt safe chunks until inventory would overflow
-     * - stop without losing remaining claim amount
+     * Remaining quantity must stay in durable claim storage when the full claim
+     * cannot fit.
      */
-    void claimAsMuchAsFits(Player player, UUID claimId);
+    ClaimItemResult claimAsMuchAsFits(Player player, UUID claimId);
 
     /**
-     * Relist directly from an item claim without sending the item back through inventory first.
+     * Relists item quantity directly from an owned item claim.
      *
-     * Locked intent:
-     * - used when a player cancels and wants to relist at a new price
-     * - should support partial relist quantity
-     * - should clamp requested quantity to the claim amount
-     * - should create/merge a fresh listing using the claim snapshot as the item source
-     * - should decrement or delete the claim only after successful listing creation
-     * - should return a ListingCreateResult so command/menu code can notify the player cleanly
-     *
-     * PSEUDOCODE:
-     * - load claim by owner + claim id
-     * - verify ownership
-     * - clamp relist quantity to claim amount
-     * - attempt listing creation using claim snapshot instead of live inventory
-     * - if listing succeeds:
-     *   - decrement claim amount by actualQuantity
-     *   - delete claim if amount reaches 0
-     *   - write admin claim/listing history as needed
-     * - return structured success/failure result
+     * This supports partial quantities, clamps to the live remaining claim amount,
+     * creates or merges a listing through the normal listing-write helper, and
+     * decrements the claim only after successful listing persistence.
      */
     ListingCreateResult relistClaim(Player player, UUID claimId, int quantity, long unitPrice);
 
     /**
-     * Payout accumulated seller earnings.
-     *
-     * PSEUDOCODE:
-     * - read pending balance or zero
-     * - if zero, do nothing / message user
-     * - attempt Vault deposit using decimal boundary conversion
-     * - on success subtract the exact claimed amount from the stored balance
-     * - delete zero-balance record
-     * - write admin claim/payout history
+     * Pays out accumulated seller earnings through Vault and clears the exact
+     * durable money-claim balance only after the deposit succeeds.
      */
-    void claimEarnings(Player player);
+    ClaimMoneyResult claimEarnings(Player player);
 }

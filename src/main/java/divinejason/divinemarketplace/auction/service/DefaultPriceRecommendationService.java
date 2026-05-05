@@ -11,11 +11,12 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.stream.Collectors;
 import java.util.logging.Logger;
 
 public final class DefaultPriceRecommendationService implements PriceRecommendationService {
     private final Logger logger;
-    private final BinaryListingLookup listingLookup;
+    private final ActiveListingLookup listingLookup;
     private final InMemorySaleHistoryIndex saleHistoryIndex;
     private final MarketProfileCalculator calculator;
     private final FlattenedMarketIndexService marketIndexService;
@@ -27,7 +28,7 @@ public final class DefaultPriceRecommendationService implements PriceRecommendat
     public DefaultPriceRecommendationService(
             JavaPlugin plugin,
             FlattenedMarketIndexService marketIndexService,
-            BinaryListingLookup listingLookup,
+            ActiveListingLookup listingLookup,
             InMemorySaleHistoryIndex saleHistoryIndex,
             MarketProfileCalculator calculator,
             SQLiteMarketPriceStore marketPriceStore,
@@ -82,10 +83,12 @@ public final class DefaultPriceRecommendationService implements PriceRecommendat
     public synchronized int forceRecalculateAll(Iterable<String> marketKeys) {
         int count = 0;
         List<MarketProfile> recalculatedProfiles = new ArrayList<>();
+        Map<String, List<Listing>> activeListingsByMarketKey = listingLookup.getAllActiveListings().stream()
+                .collect(Collectors.groupingBy(Listing::marketKey, LinkedHashMap::new, Collectors.toList()));
 
         for (String marketKey : marketKeys) {
             try {
-                MarketProfile profile = calculateProfile(marketKey);
+                MarketProfile profile = calculateProfile(marketKey, activeListingsByMarketKey.getOrDefault(marketKey, List.of()));
                 recommendedPrices.put(marketKey, profile.currentRecommendedUnitPrice());
                 recalculatedProfiles.add(profile);
                 count++;
@@ -115,6 +118,10 @@ public final class DefaultPriceRecommendationService implements PriceRecommendat
     }
 
     private MarketProfile calculateProfile(String marketKey) {
+        return calculateProfile(marketKey, listingLookup.getActiveListingsForMarketKey(marketKey));
+    }
+
+    private MarketProfile calculateProfile(String marketKey, List<Listing> activeListings) {
         MarketProfile oldProfile = new MarketProfile(
                 marketKey,
                 getRecommendedUnitPrice(marketKey),
@@ -127,7 +134,6 @@ public final class DefaultPriceRecommendationService implements PriceRecommendat
                 0L
         );
 
-        List<Listing> activeListings = listingLookup.getActiveListingsForMarketKey(marketKey);
         var recentSales = saleHistoryIndex.getRecentSalesForMarketKey(
                 marketKey,
                 divinejason.divinemarketplace.config.ConfigService.get().marketSaleLookbackMillis()
@@ -142,7 +148,9 @@ public final class DefaultPriceRecommendationService implements PriceRecommendat
         );
     }
 
-    public interface BinaryListingLookup {
+    public interface ActiveListingLookup {
         List<Listing> getActiveListingsForMarketKey(String marketKey);
+
+        List<Listing> getAllActiveListings();
     }
 }

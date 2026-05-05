@@ -12,6 +12,7 @@ import divinejason.divinemarketplace.auction.model.SaleRecord;
 import divinejason.divinemarketplace.auction.persistence.sqlite.SQLiteItemClaimStore;
 import divinejason.divinemarketplace.auction.persistence.sqlite.SQLiteListingStore;
 import divinejason.divinemarketplace.auction.persistence.sqlite.SQLiteMoneyClaimStore;
+import divinejason.divinemarketplace.config.ConfigService;
 import net.milkbowl.vault.economy.Economy;
 import net.milkbowl.vault.economy.EconomyResponse;
 import org.bukkit.entity.Player;
@@ -19,11 +20,19 @@ import org.bukkit.inventory.ItemStack;
 
 import java.util.Objects;
 import java.util.UUID;
+import java.util.logging.Logger;
 
 /**
  * Concrete listing purchase flow.
+ *
+ * Purchase delivery policy:
+ * - bought items always move into the buyer's item-claim storage
+ * - GUI claim screens deliver items later, in safe inventory-sized chunks
+ * - direct inventory insertion is intentionally not part of purchase rollback
  */
 public final class DefaultPurchaseService implements PurchaseService {
+    private final Logger logger = Logger.getLogger(DefaultPurchaseService.class.getName());
+
     private final SQLiteListingStore listingStore;
     private final SQLiteItemClaimStore itemClaimStore;
     private final SQLiteMoneyClaimStore moneyClaimStore;
@@ -31,7 +40,6 @@ public final class DefaultPurchaseService implements PurchaseService {
     private final AdminHistoryService adminHistoryService;
     private final CategoryService categoryService;
     private final MarketAnalyticsService marketAnalyticsService;
-    private final StorageItemDeliveryHelper storageItemDeliveryHelper;
     private final Economy economy;
 
     public DefaultPurchaseService(
@@ -52,7 +60,7 @@ public final class DefaultPurchaseService implements PurchaseService {
         this.adminHistoryService = Objects.requireNonNull(adminHistoryService, "adminHistoryService");
         this.categoryService = Objects.requireNonNull(categoryService, "categoryService");
         this.marketAnalyticsService = Objects.requireNonNull(marketAnalyticsService, "marketAnalyticsService");
-        this.storageItemDeliveryHelper = Objects.requireNonNull(storageItemDeliveryHelper, "storageItemDeliveryHelper");
+        Objects.requireNonNull(storageItemDeliveryHelper, "storageItemDeliveryHelper");
         this.economy = Objects.requireNonNull(economy, "economy");
     }
 
@@ -62,24 +70,29 @@ public final class DefaultPurchaseService implements PurchaseService {
             return PurchaseResult.failure(PurchaseFailureReason.INVALID_REQUEST, listingId, 0, 0L, "buyer/listingId invalid or quantity <= 0");
         }
 
-        Listing listing = listingStore.findById(listingId).orElse(null);
-        if (listing == null) {
+        Listing originalListing = listingStore.findById(listingId).orElse(null);
+        if (originalListing == null) {
             return PurchaseResult.failure(PurchaseFailureReason.LISTING_NOT_FOUND, listingId, 0, 0L, "Listing no longer exists.");
         }
 
-        if (buyer.getUniqueId().equals(listing.sellerUuid())) {
+        if (buyer.getUniqueId().equals(originalListing.sellerUuid())) {
             return PurchaseResult.failure(PurchaseFailureReason.SELF_PURCHASE_BLOCKED, listingId, 0, 0L, "Seller cannot buy their own listing.");
         }
 
-        if (quantity > listing.amount()) {
+        if (quantity > originalListing.amount()) {
             return PurchaseResult.failure(PurchaseFailureReason.QUANTITY_UNAVAILABLE, listingId, 0, 0L, "Requested quantity exceeds live listing amount.");
         }
 
         long totalPrice;
         try {
-            totalPrice = Math.multiplyExact(listing.unitPrice(), (long) quantity);
+            totalPrice = Math.multiplyExact(originalListing.unitPrice(), (long) quantity);
         } catch (ArithmeticException exception) {
             return PurchaseResult.failure(PurchaseFailureReason.INTERNAL_ERROR, listingId, 0, 0L, "Total price overflow.");
+        }
+
+        ItemStack normalizedSnapshot = normalizeSnapshotAmount(originalListing.listedItemSnapshot());
+        if (!canCreateOrMergeBuyerClaim(buyer.getUniqueId(), normalizedSnapshot, quantity)) {
+            return PurchaseResult.failure(PurchaseFailureReason.CLAIM_SLOT_UNAVAILABLE, listingId, 0, totalPrice, "Your item-claim storage is full. Empty room in /market claim, close the market window, and try again.");
         }
 
         double totalPriceDecimal = totalPrice / 100.0;
@@ -87,14 +100,15 @@ public final class DefaultPurchaseService implements PurchaseService {
             return PurchaseResult.failure(PurchaseFailureReason.INSUFFICIENT_FUNDS, listingId, 0, totalPrice, "Buyer does not have enough money.");
         }
 
-        ResolvedItemDefinition resolved = itemIdentityResolver.resolve(normalizeSnapshotAmount(listing.listedItemSnapshot()));
+        ResolvedItemDefinition resolved = itemIdentityResolver.resolve(normalizedSnapshot.clone());
+        MarketWriteTransaction transaction = new MarketWriteTransaction(logger);
 
         EconomyResponse withdraw = economy.withdrawPlayer(buyer, totalPriceDecimal);
         if (!withdraw.transactionSuccess()) {
             return PurchaseResult.failure(PurchaseFailureReason.ECONOMY_WITHDRAW_FAILED, listingId, 0, totalPrice, withdraw.errorMessage);
         }
+        transaction.onRollback(() -> economy.depositPlayer(buyer, totalPriceDecimal));
 
-        Listing originalListing = listing;
         int remainingAmount = originalListing.amount() - quantity;
         Listing updatedListing = remainingAmount > 0
                 ? new Listing(
@@ -111,14 +125,23 @@ public final class DefaultPurchaseService implements PurchaseService {
                 )
                 : null;
 
+        long nowEpochMillis = System.currentTimeMillis();
+
         try {
             if (updatedListing == null) {
                 listingStore.delete(originalListing.listingId());
             } else {
                 listingStore.saveOrReplace(updatedListing);
             }
+            transaction.onRollback(() -> listingStore.saveOrReplace(originalListing));
 
             moneyClaimStore.addToBalance(originalListing.sellerUuid(), totalPrice);
+            transaction.onRollback(() -> {
+                moneyClaimStore.subtractFromBalance(originalListing.sellerUuid(), totalPrice);
+                moneyClaimStore.deleteIfZero(originalListing.sellerUuid());
+            });
+
+            createOrMergeBuyerItemClaimWithRollback(transaction, buyer.getUniqueId(), normalizedSnapshot, quantity, nowEpochMillis);
 
             if (resolved.marketHistoryParticipation() == MarketHistoryParticipation.INCLUDED) {
                 marketAnalyticsService.recordSale(new SaleRecord(
@@ -127,7 +150,7 @@ public final class DefaultPurchaseService implements PurchaseService {
                         originalListing.listedItemSnapshot(),
                         quantity,
                         originalListing.unitPrice(),
-                        System.currentTimeMillis(),
+                        nowEpochMillis,
                         resolved.marketTrainingParticipation()
                 ));
             }
@@ -137,48 +160,24 @@ public final class DefaultPurchaseService implements PurchaseService {
                     buyer.getUniqueId(),
                     quantity,
                     totalPrice,
-                    System.currentTimeMillis(),
+                    nowEpochMillis,
                     "PURCHASED",
-                    "DIRECT_BUY"
+                    "BUY_TO_BUYER_CLAIM"
             ));
-        } catch (RuntimeException exception) {
-            rollbackPurchasePersistence(buyer, totalPriceDecimal, totalPrice, originalListing);
-            return PurchaseResult.failure(PurchaseFailureReason.INTERNAL_ERROR, listingId, 0, totalPrice, exception.getMessage());
-        }
 
-        boolean deliveredDirectly;
-        boolean createdItemClaim;
-
-        if (storageItemDeliveryHelper.canFitAmount(buyer.getInventory(), originalListing.listedItemSnapshot(), quantity)) {
-            try {
-                storageItemDeliveryHelper.insertExactQuantity(buyer.getInventory(), originalListing.listedItemSnapshot(), quantity);
-                deliveredDirectly = true;
-                createdItemClaim = false;
-            } catch (RuntimeException exception) {
-                createOrMergeBuyerItemClaim(buyer.getUniqueId(), originalListing.listedItemSnapshot(), quantity, System.currentTimeMillis());
-                adminHistoryService.recordClaim(buildItemClaimAdminRecord(
-                        buyer.getUniqueId(),
-                        resolved,
-                        quantity,
-                        System.currentTimeMillis(),
-                        "CREATED",
-                        "PURCHASE_DELIVERY_FALLBACK"
-                ));
-                deliveredDirectly = false;
-                createdItemClaim = true;
-            }
-        } else {
-            createOrMergeBuyerItemClaim(buyer.getUniqueId(), originalListing.listedItemSnapshot(), quantity, System.currentTimeMillis());
             adminHistoryService.recordClaim(buildItemClaimAdminRecord(
                     buyer.getUniqueId(),
                     resolved,
                     quantity,
-                    System.currentTimeMillis(),
+                    nowEpochMillis,
                     "CREATED",
-                    "PURCHASE_OVERFLOW_CLAIM"
+                    "PURCHASE_BUYER_CLAIM"
             ));
-            deliveredDirectly = false;
-            createdItemClaim = true;
+
+            transaction.commit();
+        } catch (RuntimeException exception) {
+            transaction.rollbackQuietly();
+            return PurchaseResult.failure(PurchaseFailureReason.INTERNAL_ERROR, listingId, 0, totalPrice, exception.getMessage());
         }
 
         categoryService.refreshIndexesFor(originalListing.marketKey(), originalListing.categoryId());
@@ -188,35 +187,57 @@ public final class DefaultPurchaseService implements PurchaseService {
                 quantity,
                 totalPrice,
                 Math.max(0, remainingAmount),
-                deliveredDirectly,
-                createdItemClaim,
+                false,
+                true,
                 originalListing.marketKey(),
                 originalListing.marketDisplayName(),
                 originalListing.categoryId()
         );
     }
 
-    private void rollbackPurchasePersistence(Player buyer, double totalPriceDecimal, long totalPrice, Listing originalListing) {
-        EconomyResponse refund = economy.depositPlayer(buyer, totalPriceDecimal);
-        if (!refund.transactionSuccess()) {
-            throw new IllegalStateException("Purchase rollback failed to refund buyer after downstream failure: " + refund.errorMessage);
+    private boolean canCreateOrMergeBuyerClaim(UUID ownerUuid, ItemStack normalizedSnapshot, int amount) {
+        ItemClaimRecord mergeTarget = findExistingSimilarClaim(ownerUuid, normalizedSnapshot);
+        if (mergeTarget != null) {
+            long mergedAmount = (long) mergeTarget.amount() + amount;
+            return mergedAmount <= Integer.MAX_VALUE;
         }
 
-        listingStore.saveOrReplace(originalListing);
-        moneyClaimStore.subtractFromBalance(originalListing.sellerUuid(), totalPrice);
-        moneyClaimStore.deleteIfZero(originalListing.sellerUuid());
+        int maxActiveClaims = ConfigService.get().itemClaimMaxActiveClaims();
+        return itemClaimStore.countByOwner(ownerUuid) < maxActiveClaims;
     }
 
-    private void createOrMergeBuyerItemClaim(UUID ownerUuid, ItemStack baseSnapshot, int amount, long createdAtEpochMillis) {
-        ItemStack normalizedSnapshot = normalizeSnapshotAmount(baseSnapshot);
+    private void createOrMergeBuyerItemClaimWithRollback(MarketWriteTransaction transaction, UUID ownerUuid, ItemStack normalizedSnapshot, int amount, long createdAtEpochMillis) {
+        ItemClaimRecord previousMergeTarget = findExistingSimilarClaim(ownerUuid, normalizedSnapshot);
         ItemClaimRecord incomingClaim = new ItemClaimRecord(
                 UUID.randomUUID(),
                 ownerUuid,
-                normalizedSnapshot,
+                normalizedSnapshot.clone(),
                 amount,
                 createdAtEpochMillis
         );
-        itemClaimStore.mergeOrCreate(incomingClaim);
+        ItemClaimRecord savedClaim = itemClaimStore.mergeOrCreate(incomingClaim);
+        transaction.onRollback(() -> {
+            if (previousMergeTarget == null) {
+                itemClaimStore.delete(savedClaim.claimId(), ownerUuid);
+            } else {
+                itemClaimStore.saveOrReplace(previousMergeTarget);
+            }
+        });
+    }
+
+    private ItemClaimRecord findExistingSimilarClaim(UUID ownerUuid, ItemStack normalizedSnapshot) {
+        for (ItemClaimRecord claim : itemClaimStore.findByOwner(ownerUuid, 0, Integer.MAX_VALUE)) {
+            if (itemsSimilarIgnoringAmount(claim.claimItemSnapshot(), normalizedSnapshot)) {
+                return claim;
+            }
+        }
+        return null;
+    }
+
+    private boolean itemsSimilarIgnoringAmount(ItemStack left, ItemStack right) {
+        ItemStack leftCopy = normalizeSnapshotAmount(left);
+        ItemStack rightCopy = normalizeSnapshotAmount(right);
+        return leftCopy.isSimilar(rightCopy);
     }
 
     private AdminTransactionRecord buildSaleAdminRecord(
