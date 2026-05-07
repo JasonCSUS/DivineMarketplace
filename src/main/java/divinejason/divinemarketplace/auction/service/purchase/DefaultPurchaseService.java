@@ -33,6 +33,7 @@ import java.util.UUID;
 import java.util.logging.Logger;
 import net.milkbowl.vault.economy.Economy;
 import net.milkbowl.vault.economy.EconomyResponse;
+import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
 
@@ -158,16 +159,19 @@ public final class DefaultPurchaseService implements PurchaseService {
             }
             transaction.onRollback(() -> listingStore.saveOrReplaceInMemory(originalListing));
 
-            long previousSellerBalance = moneyClaimStore.getBalanceOrZero(originalListing.sellerUuid());
-            long updatedSellerBalance = moneyClaimStore.addToBalanceInMemory(originalListing.sellerUuid(), totalPrice);
-            writeBatch.add(moneyClaimStore.putOrDeleteMutation(originalListing.sellerUuid(), updatedSellerBalance));
-            transaction.onRollback(() -> moneyClaimStore.setBalanceInMemory(originalListing.sellerUuid(), previousSellerBalance));
+            boolean sellerPaidDirectly = tryPayOnlineSellerDirectly(transaction, originalListing.sellerUuid(), totalPrice);
+            if (!sellerPaidDirectly) {
+                long previousSellerBalance = moneyClaimStore.getBalanceOrZero(originalListing.sellerUuid());
+                long updatedSellerBalance = moneyClaimStore.addToBalanceInMemory(originalListing.sellerUuid(), totalPrice);
+                writeBatch.add(moneyClaimStore.putOrDeleteMutation(originalListing.sellerUuid(), updatedSellerBalance));
+                transaction.onRollback(() -> moneyClaimStore.setBalanceInMemory(originalListing.sellerUuid(), previousSellerBalance));
+            }
 
             ItemClaimRecord savedBuyerClaim = createOrMergeBuyerItemClaimWithRollback(transaction, buyer.getUniqueId(), normalizedSnapshot, quantity, nowEpochMillis);
             writeBatch.add(itemClaimStore.putMutation(savedBuyerClaim));
 
             MarketEventRecord buyEvent = buildBuyEvent(
-                    originalListing, buyer.getUniqueId(), quantity, totalPrice, nowEpochMillis, resolved);
+                    originalListing, buyer.getUniqueId(), quantity, totalPrice, nowEpochMillis, resolved, sellerPaidDirectly);
             marketEventService.appendInMemory(buyEvent);
             writeBatch.add(marketEventService.putMutation(buyEvent));
             transaction.onRollback(() -> marketEventService.deleteInMemory(buyEvent.eventId()));
@@ -203,6 +207,26 @@ public final class DefaultPurchaseService implements PurchaseService {
 
         int maxActiveClaims = ConfigService.get().itemClaimMaxActiveClaims();
         return itemClaimStore.countByOwner(ownerUuid) < maxActiveClaims;
+    }
+
+    private boolean tryPayOnlineSellerDirectly(MarketWriteTransaction transaction, UUID sellerUuid, long totalPrice) {
+        Player seller = Bukkit.getPlayer(sellerUuid);
+        if (seller == null || !seller.isOnline()) {
+            return false;
+        }
+
+        double totalPriceDecimal = totalPrice / 100.0;
+        EconomyResponse deposit = economy.depositPlayer(seller, totalPriceDecimal);
+        if (!deposit.transactionSuccess()) {
+            logger.warning("Failed to pay online seller directly; falling back to money claim for "
+                    + sellerUuid + ": " + deposit.errorMessage);
+            return false;
+        }
+
+        transaction.onRollback(() -> economy.withdrawPlayer(seller, totalPriceDecimal));
+        seller.sendRichMessage("<green>Marketplace sale:</green> <yellow>$" + String.format(java.util.Locale.US, "%.2f", totalPriceDecimal)
+                + "</yellow> <gray>was paid directly to your balance.</gray>");
+        return true;
     }
 
     private ItemClaimRecord createOrMergeBuyerItemClaimWithRollback(MarketWriteTransaction transaction, UUID ownerUuid, ItemStack normalizedSnapshot, int amount, long createdAtEpochMillis) {
@@ -246,7 +270,8 @@ public final class DefaultPurchaseService implements PurchaseService {
             int quantity,
             long totalPrice,
             long timestampEpochMillis,
-            ResolvedItemDefinition resolved
+            ResolvedItemDefinition resolved,
+            boolean sellerPaidDirectly
     ) {
         boolean playerHistory = resolved.marketHistoryParticipation() == MarketHistoryParticipation.INCLUDED;
         return new MarketEventRecord(
@@ -266,7 +291,7 @@ public final class DefaultPurchaseService implements PurchaseService {
                 totalPrice,
                 listing.unitPrice(),
                 "PURCHASED",
-                "BUY_TO_BUYER_CLAIM",
+                sellerPaidDirectly ? "BUY_TO_BUYER_CLAIM_SELLER_PAID_DIRECT" : "BUY_TO_BUYER_CLAIM_SELLER_MONEY_CLAIM",
                 playerHistory ? resolved.marketTrainingParticipation() : null
         );
     }

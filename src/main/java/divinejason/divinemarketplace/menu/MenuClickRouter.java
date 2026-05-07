@@ -106,8 +106,8 @@ public final class MenuClickRouter {
             case CLAIM_AS_MUCH_AS_FITS -> claimAsMuchAsFits(player, session);
             case CLAIM_EARNINGS -> claimEarnings(player, session);
             case SORT_CYCLE -> menuController.open(player, session.withSortMode(session.sortMode().next()).withPage(0));
-            case QUANTITY_DECREASE -> adjustQuantity(player, session, -1);
-            case QUANTITY_INCREASE -> adjustQuantity(player, session, clickType.isShiftClick() ? 16 : 1);
+            case QUANTITY_DECREASE -> adjustQuantity(player, session, clickType.isShiftClick() ? -64 : -1);
+            case QUANTITY_INCREASE -> adjustQuantity(player, session, clickType.isShiftClick() ? 64 : 1);
             case CONFIRM_PURCHASE -> confirmPurchase(player, session);
             case CANCEL_LISTING -> cancelListing(player, session);
             case OPEN_SALE_HISTORY -> menuController.open(player, session.pushAndOpen(session.withView(MenuView.SALE_HISTORY).withPage(0)));
@@ -202,7 +202,12 @@ public final class MenuClickRouter {
 
             menuController.invalidation().markListingPurchaseCompleted();
             player.sendRichMessage("<green>Purchased</green> <white>" + escapeMini(result.marketDisplayName()) + "</white> <gray>x" + result.quantityPurchased() + ".</gray> <yellow>Items were moved to your claims.</yellow>");
-            unlockAndRefresh(player);
+            menuController.open(player, session.pushAndOpen(session
+                    .withView(MenuView.CLAIMS)
+                    .withSelectedListingId(null)
+                    .withSelectedClaimId(null)
+                    .withPage(0)
+                    .withActionLocked(false)));
         }, resourceKey("listing", session.selectedListingId()));
     }
 

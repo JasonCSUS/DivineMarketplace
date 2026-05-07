@@ -48,8 +48,8 @@ public final class MenuItemFactory {
     public ItemStack fillerPurple() { return configured("fillerPurple", Material.PURPLE_STAINED_GLASS_PANE, " "); }
     public ItemStack fillerBlack() { return configured("fillerBlack", Material.BLACK_STAINED_GLASS_PANE, " "); }
     public ItemStack lockedRed() { return configured("lockedRed", Material.RED_STAINED_GLASS_PANE, "<red>Unavailable</red>"); }
-    public ItemStack increaseArrow() { return configured("increase", Material.LIME_DYE, "<green>Increase Quantity</green>"); }
-    public ItemStack decreaseArrow() { return configured("decrease", Material.RED_DYE, "<red>Decrease Quantity</red>"); }
+    public ItemStack increaseArrow() { return configured("increase", Material.LIME_DYE, "<green>Increase Quantity</green>", List.of("<gray>Click:</gray> <white>+1</white>", "<gray>Shift-click:</gray> <white>+64</white>")); }
+    public ItemStack decreaseArrow() { return configured("decrease", Material.RED_DYE, "<red>Decrease Quantity</red>", List.of("<gray>Click:</gray> <white>-1</white>", "<gray>Shift-click:</gray> <white>-64</white>")); }
     public ItemStack cancelListingButton() { return configured("cancelListing", Material.BARRIER, "<red>Cancel Listing</red>"); }
     public ItemStack claimOneChunkButton(ItemClaimRecord claim) { return configured("claimOneChunk", Material.CHEST, "<green>Claim One Stack</green>", List.of("<gray>Claims up to one safe stack.</gray>", "<gray>Remaining:</gray> <white>" + claim.amount() + "</white>")); }
     public ItemStack claimAsMuchAsFitsButton(ItemClaimRecord claim) { return configured("claimAsMuchAsFits", Material.ENDER_CHEST, "<green>Claim As Much As Fits</green>", List.of("<gray>Fills available inventory space safely.</gray>", "<gray>Remaining:</gray> <white>" + claim.amount() + "</white>")); }
@@ -121,7 +121,11 @@ public final class MenuItemFactory {
     }
 
     public ItemStack quantityPaper(int quantity, long unitPrice, int availableAmount) {
-        return configuredDynamic("quantity", Material.PAPER, "<yellow>Quantity: " + quantity + "</yellow>", List.of("<gray>Available:</gray> <white>" + availableAmount + "</white>", "<gray>Total:</gray> <yellow>$" + formatMoney(unitPrice * Math.max(1, quantity)) + "</yellow>"));
+        return configuredDynamic("quantity", Material.PAPER, "<yellow>Quantity: " + quantity + "</yellow>", List.of(
+                "<gray>Available:</gray> <white>" + availableAmount + "</white>",
+                "<gray>Total:</gray> <yellow>$" + formatMoney(unitPrice * Math.max(1, quantity)) + "</yellow>",
+                "<dark_gray>Use red/green buttons to change quantity.</dark_gray>",
+                "<dark_gray>Shift-click those buttons to move by 64.</dark_gray>"));
     }
 
     public ItemStack confirmPurchaseButton(int quantity, long totalPrice) {
