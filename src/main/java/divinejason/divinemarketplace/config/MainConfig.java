@@ -5,7 +5,6 @@ package divinejason.divinemarketplace.config;
  * File role: Stores parsed main configuration values in an immutable object used by services and runtime maintenance.
  */
 import divinejason.divinemarketplace.auction.model.SortMode;
-
 import java.util.List;
 
 public record MainConfig(
@@ -18,12 +17,13 @@ public record MainConfig(
         Market market,
         Search search,
         Admin admin,
-        Ui ui
+        Ui ui,
+        Debug debug
 ) {
     public record Storage(Database database, Limits limits, Cleanup cleanup) {}
     public record Database(String sqliteFile, String modulePrefix) {}
-    public record Limits(int salesHistoryMaxMb, int adminSalesHistoryMaxMb, int adminListingsHistoryMaxMb, int adminClaimsHistoryMaxMb, int itemClaimsSoftMaxMb) {}
-    public record Cleanup(int abandonedItemClaimDays) {}
+    public record Limits(int itemClaimsSoftMaxMb) {}
+    public record Cleanup(int abandonedItemClaimDays, int marketEventRetentionDays) {}
     public record CustomItems(boolean autoDiscoverUnknownItems, boolean autoWriteDefinitionsImmediately, String defaultCategory, boolean useClonedItemForPreviewTemplate, boolean requireAdminReviewForAllNewItems, boolean highPriorityOnlyForUnsafeResolution) {}
     public record CustomItemIdentity(UnknownCustomModelData unknownCustomModelData, MetadataSnapshots metadataSnapshots, List<Rule> rules) {}
     public record UnknownCustomModelData(boolean enabled, boolean autoCreateDefinition, String category) {}
@@ -41,4 +41,5 @@ public record MainConfig(
     public record Search(boolean partialMatching, int minTokenLength, int maxResultsPerPage) {}
     public record Admin(boolean alertUnknownCustomItems, boolean alertUnknownCustomEnchants, boolean writeUnknownDefinitionsImmediately, boolean allowInGameDefinitionCommands, boolean regeneratePermissionsFileOnReload) {}
     public record Ui(SortMode defaultSortMode, boolean showEmptyTopLevelCategories, boolean showListingCountsInCategoryLore, boolean interceptAllInventoryClicks) {}
+    public record Debug(boolean performanceTimings) {}
 }

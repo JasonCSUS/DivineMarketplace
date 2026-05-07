@@ -4,9 +4,8 @@ package divinejason.divinemarketplace.menu;
 /*
  * File role: Stores a validated Material/custom-model-data pair for configurable GUI icons.
  */
-import org.bukkit.Material;
-
 import java.util.List;
+import org.bukkit.Material;
 
 /**
  * Editable visual definition for one GUI item.

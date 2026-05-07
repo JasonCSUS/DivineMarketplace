@@ -2,7 +2,7 @@ package divinejason.divinemarketplace.menu;
 
 
 /*
- * File role: Wraps one GUI page of data plus has-previous/has-next flags computed from pageSize + 1 loading.
+ * File role: Wraps one GUI page of data plus has-previous/has-next flags computed by probing adjacent pages.
  */
 import java.util.List;
 

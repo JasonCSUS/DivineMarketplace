@@ -7,19 +7,18 @@ package divinejason.divinemarketplace.command;
 import divinejason.divinemarketplace.auction.model.CustomItemDefinition;
 import divinejason.divinemarketplace.auction.model.CustomItemOverrideRecord;
 import divinejason.divinemarketplace.auction.model.CustomItemTypeExtractionResult;
-import divinejason.divinemarketplace.auction.service.SerializedItemSignalView;
+import divinejason.divinemarketplace.auction.service.identity.SerializedItemSignalView;
 import divinejason.divinemarketplace.config.ConfigService;
-import org.bukkit.command.CommandSender;
-import org.bukkit.enchantments.Enchantment;
-import org.bukkit.entity.Player;
-import org.bukkit.inventory.ItemStack;
-
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import org.bukkit.command.CommandSender;
+import org.bukkit.enchantments.Enchantment;
+import org.bukkit.entity.Player;
+import org.bukkit.inventory.ItemStack;
 
 final class MarketInspectAdminCommand implements MarketAdminCommandHandler {
     private final MarketAdminCommandContext context;

@@ -5,7 +5,6 @@ package divinejason.divinemarketplace.auction.model;
  * File role: Carries immutable unknown custom item record data between marketplace services, persistence stores, commands, and GUI rendering.
  */
 import java.time.Instant;
-
 import org.bukkit.Material;
 
 /**

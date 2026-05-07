@@ -12,12 +12,6 @@ import divinejason.divinemarketplace.auction.model.RecommendationHistoryPoint;
 import divinejason.divinemarketplace.auction.model.SaleRecord;
 import divinejason.divinemarketplace.auction.model.SortMode;
 import divinejason.divinemarketplace.auction.model.SubcategorySummary;
-import net.kyori.adventure.text.Component;
-import net.kyori.adventure.text.minimessage.MiniMessage;
-import org.bukkit.Material;
-import org.bukkit.inventory.ItemStack;
-import org.bukkit.inventory.meta.ItemMeta;
-
 import java.time.Instant;
 import java.time.YearMonth;
 import java.time.ZoneId;
@@ -25,6 +19,11 @@ import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.minimessage.MiniMessage;
+import org.bukkit.Material;
+import org.bukkit.inventory.ItemStack;
+import org.bukkit.inventory.meta.ItemMeta;
 
 /** Central GUI item builder backed by editable menu.yml visual keys. */
 public final class MenuItemFactory {
@@ -72,11 +71,16 @@ public final class MenuItemFactory {
 
     public ItemStack marketGroupItem(SubcategorySummary summary) {
         Material material = materialFromKey(summary.previewIconKey(), Material.CHEST);
-        return configuredDynamic("marketGroup", material, "<white>" + escape(summary.marketDisplayName()) + "</white>", List.of("<gray>Listed amount:</gray> <white>" + summary.listedQuantity() + "</white>", "<dark_gray>Click to view active listings.</dark_gray>"));
+        return configuredDynamicMaterial("marketGroup", material, "<white>" + escape(summary.marketDisplayName()) + "</white>", List.of("<gray>Listed amount:</gray> <white>" + summary.listedQuantity() + "</white>", "<dark_gray>Click to view active listings.</dark_gray>"));
     }
 
     public ItemStack enchantTargetItem(EnchantBrowseSummary summary) {
-        return configuredDynamic("enchantTarget", Material.ENCHANTED_BOOK, "<light_purple>" + escape(summary.displayName()) + "</light_purple>", List.of("<gray>Book groups:</gray> <white>" + summary.activeMarketGroupCount() + "</white>", "<gray>Listed amount:</gray> <white>" + summary.listedQuantity() + "</white>", "<dark_gray>Click to browse this enchant target.</dark_gray>"));
+        String displayName = enchantTargetDisplayName(summary);
+        Material material = enchantTargetMaterial(summary);
+        String token = summary == null || summary.group() == null ? "unknown" : summary.group().commandToken();
+        int activeGroups = summary == null ? 0 : summary.activeMarketGroupCount();
+        int listedQuantity = summary == null ? 0 : summary.listedQuantity();
+        return configuredDynamic("enchantTarget." + token, material, "<light_purple>" + escape(displayName) + "</light_purple>", List.of("<gray>Book groups:</gray> <white>" + activeGroups + "</white>", "<gray>Listed amount:</gray> <white>" + listedQuantity + "</white>", "<dark_gray>Click to browse this enchant target.</dark_gray>"));
     }
 
     public ItemStack listingItem(Listing listing) {
@@ -92,6 +96,13 @@ public final class MenuItemFactory {
 
     public ItemStack ownerListingInfo(Listing listing) {
         return configuredDynamic("ownerListingInfo", Material.PAPER, "<yellow>Your Listing</yellow>", List.of("<gray>This is your active listing.</gray>", "<gray>Amount:</gray> <white>" + listing.amount() + "</white>", "<gray>Unit price:</gray> <yellow>$" + formatMoney(listing.unitPrice()) + "</yellow>", "<dark_gray>You can cancel it from this view.</dark_gray>"));
+    }
+
+    public ItemStack listingCapacityInfo(int listedCount, int maxSlots) {
+        int used = Math.max(0, listedCount);
+        int total = Math.max(0, maxSlots);
+        int free = Math.max(0, total - used);
+        return configuredDynamic("listingCapacity", Material.PAPER, "<gold>Listing Slots</gold>", List.of("<gray>Used:</gray> <white>" + used + " / " + total + "</white>", "<gray>Available:</gray> <white>" + free + "</white>", "<dark_gray>Empty inventory spaces below are open listing slots.</dark_gray>"));
     }
 
     public ItemStack claimItem(ItemClaimRecord claim) {
@@ -132,6 +143,12 @@ public final class MenuItemFactory {
     private ItemStack configuredDynamic(String key, Material fallbackMaterial, String fallbackName, List<String> extraLore) {
         MenuIconSpec spec = visuals.item(key, fallbackMaterial, fallbackName);
         return buildItem(spec, fallbackName, true, extraLore);
+    }
+
+    private ItemStack configuredDynamicMaterial(String key, Material forcedMaterial, String fallbackName, List<String> extraLore) {
+        MenuIconSpec spec = visuals.item(key, forcedMaterial, fallbackName);
+        MenuIconSpec materialForcedSpec = MenuIconSpec.of(forcedMaterial, spec.name(), spec.lore(), spec.customModelData());
+        return buildItem(materialForcedSpec, fallbackName, true, extraLore);
     }
 
     private ItemStack configured(String key, Material fallbackMaterial, String fallbackName, List<String> extraLore) {
@@ -182,6 +199,39 @@ public final class MenuItemFactory {
 
     private Component parse(String text) {
         return miniMessage.deserialize(text == null ? "" : text);
+    }
+
+
+    private String enchantTargetDisplayName(EnchantBrowseSummary summary) {
+        if (summary == null || summary.group() == null) {
+            return "Unknown Enchants";
+        }
+        return summary.group().displayName() + " Enchants";
+    }
+
+    private Material enchantTargetMaterial(EnchantBrowseSummary summary) {
+        if (summary == null || summary.group() == null) {
+            return Material.ENCHANTED_BOOK;
+        }
+        return switch (summary.group()) {
+            case SWORD -> Material.DIAMOND_SWORD;
+            case AXE -> Material.DIAMOND_AXE;
+            case BOW -> Material.BOW;
+            case CROSSBOW -> Material.CROSSBOW;
+            case TRIDENT -> Material.TRIDENT;
+            case ARMOR, CHESTPLATE -> Material.DIAMOND_CHESTPLATE;
+            case HELMET -> Material.DIAMOND_HELMET;
+            case LEGGINGS -> Material.DIAMOND_LEGGINGS;
+            case BOOTS -> Material.DIAMOND_BOOTS;
+            case TOOLS, PICKAXE -> Material.DIAMOND_PICKAXE;
+            case SHOVEL -> Material.DIAMOND_SHOVEL;
+            case HOE -> Material.DIAMOND_HOE;
+            case ELYTRA -> Material.ELYTRA;
+            case SHIELD -> Material.SHIELD;
+            case SHEARS -> Material.SHEARS;
+            case UNIVERSAL -> Material.ENCHANTED_BOOK;
+            case UNKNOWN -> Material.BOOK;
+        };
     }
 
     private Material fallbackCategoryMaterial(String categoryId) {

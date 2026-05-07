@@ -4,30 +4,34 @@ package divinejason.divinemarketplace.setup;
 /*
  * File role: Creates missing plugin folders/default files on first install without overwriting server-owner edits.
  */
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.logging.Logger;
 import org.bukkit.Material;
 import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.plugin.java.JavaPlugin;
 
-import java.io.IOException;
-import java.io.InputStream;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.util.ArrayList;
-import java.util.LinkedHashSet;
-import java.util.List;
-import java.util.Set;
-import java.util.logging.Logger;
-
 /**
  * Creates the plugin folder structure and any missing default files on startup.
  *
  * Important policy:
- * - bundled files in src/main/resources are the exact shipped defaults
- * - built-in category mapping files are copied exactly from bundled defaults
- * - blank category files are generated only when new configured categories have no default file
- * - validation of built-in category coverage runs only when bundled defaults are
- *   being copied during bootstrap
+ * - bundled files in src/main/resources are seed/default sources
+ * - category_config.yml is copied once and remains owner-editable
+ * - bundled category YAML files are internal seed data only; they are converted
+ *   into one server-side categories.csv file instead of being copied as many
+ *   separate files
+ * - existing server-owner files are never overwritten by startup initialization
  */
 public final class PluginFileInitializer {
 
@@ -58,10 +62,10 @@ public final class PluginFileInitializer {
                 ensureTextFile(logFile, "");
             }
 
-            boolean copiedAnyBundledCategoryDefaults = ensureCategoryFiles(dataFolder, logger);
+            boolean generatedCategoriesCsv = ensureCategoriesCsv(dataFolder, logger);
 
-            if (copiedCategoryConfig || copiedAnyBundledCategoryDefaults) {
-                validateBundledDefaultCategoryCoverage(dataFolder, logger);
+            if (copiedCategoryConfig || generatedCategoriesCsv) {
+                validateCategoriesCsvCoverage(dataFolder, logger);
             }
         } catch (IOException exception) {
             throw new IllegalStateException("Failed to initialize DivineMarketplace files.", exception);
@@ -69,16 +73,21 @@ public final class PluginFileInitializer {
     }
 
     /**
-     * Ensures every configured category has a live category file.
+     * Creates categories.csv when it is missing.
      *
-     * Built-in categories:
-     * - copy the bundled exact default file from resources/defaults/categories/
+     * Migration order matters:
+     * - if an older alpha install already has plugins/DivineMarketplace/categories/*.yml,
+     *   convert those live files first so server-owner category edits are preserved
+     * - otherwise build the CSV from bundled defaults/categories/*.yml resources
      *
-     * Custom categories:
-     * - generate a blank file with categoryId and empty items list
+     * The legacy folder is left alone after conversion. Removing it automatically
+     * would be risky because it could contain owner notes or staged edits.
      */
-    private boolean ensureCategoryFiles(Path dataFolder, Logger logger) throws IOException {
-        boolean copiedAnyBundledCategoryDefaults = false;
+    private boolean ensureCategoriesCsv(Path dataFolder, Logger logger) throws IOException {
+        Path csvFile = PluginDirectoryLayout.resolveCategoriesCsvFile(dataFolder);
+        if (Files.exists(csvFile)) {
+            return false;
+        }
 
         YamlConfiguration categoryConfig = YamlConfiguration.loadConfiguration(
                 PluginDirectoryLayout.resolveCategoryConfigFile(dataFolder).toFile()
@@ -86,38 +95,83 @@ public final class PluginFileInitializer {
 
         ConfigurationSection categoriesSection = categoryConfig.getConfigurationSection("categories");
         if (categoriesSection == null) {
-            logger.warning("category_config.yml has no categories section; no category mapping files were generated.");
-            return false;
+            logger.warning("category_config.yml has no categories section; generated categories.csv with only a header.");
+            writeCategoriesCsv(csvFile, Map.of());
+            return true;
         }
 
-        Set<String> categoryIds = new LinkedHashSet<>(categoriesSection.getKeys(false));
-        for (String categoryId : categoryIds) {
-            Path categoryFile = PluginDirectoryLayout.resolveCategoryFile(dataFolder, categoryId);
-            if (Files.exists(categoryFile)) {
+        Map<String, List<String>> categoryItems = loadCategoryItemsFromLegacyOrBundledDefaults(dataFolder, categoriesSection, logger);
+        writeCategoriesCsv(csvFile, categoryItems);
+        logger.info(() -> "Generated editable category mapping file: " + dataFolder.relativize(csvFile));
+        return true;
+    }
+
+    private Map<String, List<String>> loadCategoryItemsFromLegacyOrBundledDefaults(
+            Path dataFolder,
+            ConfigurationSection categoriesSection,
+            Logger logger
+    ) {
+        Map<String, List<String>> categoryItems = new LinkedHashMap<>();
+
+        for (String rawCategoryId : categoriesSection.getKeys(false)) {
+            String categoryId = normalizeCategory(rawCategoryId);
+            Path legacyFile = PluginDirectoryLayout.resolveLegacyCategoryFile(dataFolder, categoryId);
+
+            if (Files.exists(legacyFile)) {
+                YamlConfiguration legacyYaml = YamlConfiguration.loadConfiguration(legacyFile.toFile());
+                categoryItems.put(categoryId, normalizeMaterialNames(legacyYaml.getStringList("items")));
                 continue;
             }
 
             String bundledResource = PluginDirectoryLayout.bundledCategoryResource(categoryId);
             if (hasBundledResource(bundledResource)) {
-                if (ensureBundledFile(bundledResource, categoryFile, logger)) {
-                    copiedAnyBundledCategoryDefaults = true;
-                }
+                YamlConfiguration bundledYaml = loadBundledYaml(bundledResource);
+                categoryItems.put(categoryId, normalizeMaterialNames(bundledYaml.getStringList("items")));
             } else {
-                createBlankCategoryFileIfMissing(categoryFile, categoryId);
+                categoryItems.put(categoryId, List.of());
+                logger.info(() -> "No bundled default category list for custom category " + categoryId + "; categories.csv will start with no rows for it.");
             }
         }
 
-        return copiedAnyBundledCategoryDefaults;
+        return categoryItems;
     }
 
-    private void validateBundledDefaultCategoryCoverage(Path dataFolder, Logger logger) {
-        try {
-            YamlConfiguration categoryConfig = YamlConfiguration.loadConfiguration(
-                    PluginDirectoryLayout.resolveCategoryConfigFile(dataFolder).toFile()
-            );
+    private void writeCategoriesCsv(Path csvFile, Map<String, List<String>> categoryItems) throws IOException {
+        String newline = System.lineSeparator();
+        StringBuilder builder = new StringBuilder();
+        builder.append("# Editable vanilla item category map for DivineMarketplace.").append(newline);
+        builder.append("# category_config.yml controls display names, icons, and ordering.").append(newline);
+        builder.append("# default_prices.csv is intentionally separate from this category mapping file.").append(newline);
+        builder.append("material,category").append(newline);
 
-            ConfigurationSection categoriesSection = categoryConfig.getConfigurationSection("categories");
-            if (categoriesSection == null) {
+        for (Map.Entry<String, List<String>> entry : categoryItems.entrySet()) {
+            String categoryId = normalizeCategory(entry.getKey());
+            for (String materialName : entry.getValue()) {
+                if (materialName.isBlank()) {
+                    continue;
+                }
+                builder.append(escapeCsv(materialName)).append(',').append(escapeCsv(categoryId)).append(newline);
+            }
+        }
+
+        ensureTextFile(csvFile, builder.toString());
+    }
+
+    private List<String> normalizeMaterialNames(List<String> rawNames) {
+        List<String> normalized = new ArrayList<>();
+        for (String rawName : rawNames) {
+            if (rawName == null || rawName.isBlank()) {
+                continue;
+            }
+            normalized.add(rawName.trim().toUpperCase(java.util.Locale.ROOT));
+        }
+        return normalized;
+    }
+
+    private void validateCategoriesCsvCoverage(Path dataFolder, Logger logger) {
+        try {
+            Path csvFile = PluginDirectoryLayout.resolveCategoriesCsvFile(dataFolder);
+            if (!Files.exists(csvFile)) {
                 return;
             }
 
@@ -125,25 +179,15 @@ public final class PluginFileInitializer {
             Set<Material> duplicates = new LinkedHashSet<>();
             List<String> invalidEntries = new ArrayList<>();
 
-            for (String categoryId : categoriesSection.getKeys(false)) {
-                String bundledResource = PluginDirectoryLayout.bundledCategoryResource(categoryId);
-                if (!hasBundledResource(bundledResource)) {
+            for (CsvRow row : readCategoriesCsvRows(csvFile)) {
+                Material material = Material.matchMaterial(row.material());
+                if (material == null) {
+                    invalidEntries.add(row.category() + ":" + row.material());
                     continue;
                 }
 
-                Path liveCategoryFile = PluginDirectoryLayout.resolveCategoryFile(dataFolder, categoryId);
-                YamlConfiguration categoryYaml = YamlConfiguration.loadConfiguration(liveCategoryFile.toFile());
-
-                for (String rawMaterialName : categoryYaml.getStringList("items")) {
-                    Material material = Material.matchMaterial(rawMaterialName);
-                    if (material == null) {
-                        invalidEntries.add(categoryId + ":" + rawMaterialName);
-                        continue;
-                    }
-
-                    if (!assigned.add(material)) {
-                        duplicates.add(material);
-                    }
+                if (!assigned.add(material)) {
+                    duplicates.add(material);
                 }
             }
 
@@ -158,20 +202,78 @@ public final class PluginFileInitializer {
             }
 
             if (!invalidEntries.isEmpty()) {
-                logger.warning(() -> "Built-in category defaults contain invalid material names: " + invalidEntries);
+                logger.warning(() -> "categories.csv contains invalid material names: " + invalidEntries);
             }
 
             if (!duplicates.isEmpty()) {
-                logger.warning(() -> "Built-in category defaults contain duplicate materials: " + duplicates);
+                logger.warning(() -> "categories.csv contains duplicate material assignments. Later rows win during market-index seeding: " + duplicates);
             }
 
             if (!uncategorized.isEmpty()) {
-                logger.warning(() -> "Built-in category defaults missed " + uncategorized.size() + " allowed vanilla materials. They will fall into unsorted until categorized.");
+                logger.warning(() -> "categories.csv missed " + uncategorized.size() + " allowed vanilla materials. They will fall into unsorted until categorized.");
                 logger.warning(() -> "Uncategorized materials: " + uncategorized);
             }
         } catch (Exception exception) {
-            logger.warning(() -> "Failed to validate bundled default category coverage: " + exception.getMessage());
+            logger.warning(() -> "Failed to validate categories.csv coverage: " + exception.getMessage());
         }
+    }
+
+    private List<CsvRow> readCategoriesCsvRows(Path csvFile) throws IOException {
+        List<CsvRow> rows = new ArrayList<>();
+        boolean headerSeen = false;
+
+        for (String rawLine : Files.readAllLines(csvFile, StandardCharsets.UTF_8)) {
+            String line = rawLine.trim();
+            if (line.isBlank() || line.startsWith("#")) {
+                continue;
+            }
+
+            List<String> columns = parseCsvLine(rawLine);
+            if (columns.size() < 2) {
+                continue;
+            }
+
+            if (!headerSeen && "material".equalsIgnoreCase(columns.get(0).trim()) && "category".equalsIgnoreCase(columns.get(1).trim())) {
+                headerSeen = true;
+                continue;
+            }
+            headerSeen = true;
+
+            String material = columns.get(0).trim();
+            String category = normalizeCategory(columns.get(1));
+            if (!material.isBlank()) {
+                rows.add(new CsvRow(material, category));
+            }
+        }
+
+        return rows;
+    }
+
+    private List<String> parseCsvLine(String line) {
+        List<String> columns = new ArrayList<>();
+        StringBuilder current = new StringBuilder();
+        boolean quoted = false;
+
+        for (int index = 0; index < line.length(); index++) {
+            char character = line.charAt(index);
+            if (character == '"') {
+                if (quoted && index + 1 < line.length() && line.charAt(index + 1) == '"') {
+                    current.append('"');
+                    index++;
+                } else {
+                    quoted = !quoted;
+                }
+                continue;
+            }
+            if (character == ',' && !quoted) {
+                columns.add(current.toString());
+                current.setLength(0);
+                continue;
+            }
+            current.append(character);
+        }
+        columns.add(current.toString());
+        return columns;
     }
 
     private boolean shouldSkipVanillaCoverageValidation(Material material) {
@@ -218,14 +320,6 @@ public final class PluginFileInitializer {
         };
     }
 
-    private void createBlankCategoryFileIfMissing(Path categoryFile, String categoryId) throws IOException {
-        if (Files.exists(categoryFile)) {
-            return;
-        }
-        String content = "categoryId: " + categoryId + System.lineSeparator() + "items:" + System.lineSeparator();
-        ensureTextFile(categoryFile, content);
-    }
-
     private boolean ensureBundledFile(String resourcePath, Path destination, Logger logger) throws IOException {
         if (Files.exists(destination)) {
             return false;
@@ -251,6 +345,31 @@ public final class PluginFileInitializer {
         }
     }
 
+    private YamlConfiguration loadBundledYaml(String resourcePath) {
+        try (InputStream inputStream = plugin.getResource(resourcePath)) {
+            if (inputStream == null) {
+                return new YamlConfiguration();
+            }
+            return YamlConfiguration.loadConfiguration(new InputStreamReader(inputStream, StandardCharsets.UTF_8));
+        } catch (IOException exception) {
+            throw new IllegalStateException("Failed to read bundled YAML resource: " + resourcePath, exception);
+        }
+    }
+
+    private String normalizeCategory(String categoryId) {
+        return categoryId == null || categoryId.isBlank() ? "unsorted" : categoryId.trim().toLowerCase(java.util.Locale.ROOT);
+    }
+
+    private String escapeCsv(String value) {
+        if (value == null) {
+            return "";
+        }
+        boolean mustQuote = value.indexOf(',') >= 0 || value.indexOf('"') >= 0 || value.indexOf('\n') >= 0 || value.indexOf('\r') >= 0;
+        if (!mustQuote) {
+            return value;
+        }
+        return "\"" + value.replace("\"", "\"\"") + "\"";
+    }
 
     private void ensureTextFile(Path path, String contents) throws IOException {
         if (Files.exists(path)) {
@@ -258,7 +377,7 @@ public final class PluginFileInitializer {
         }
 
         ensureDirectory(path.getParent());
-        Files.writeString(path, contents);
+        Files.writeString(path, contents, StandardCharsets.UTF_8);
     }
 
     private void ensureDirectory(Path path) throws IOException {
@@ -266,5 +385,8 @@ public final class PluginFileInitializer {
             return;
         }
         Files.createDirectories(path);
+    }
+
+    private record CsvRow(String material, String category) {
     }
 }

@@ -11,7 +11,7 @@ package divinejason.divinemarketplace.auction.model;
  * - listedQuantity represents total listed item quantity for the market group
  * - it is intentionally quantity-oriented market flow data, not number of listing records
  *
- * previewIconKey is a UI hint only; MarketIconResolver builds the actual display item.
+ * previewIconKey is a UI hint only; the menu layer builds the actual display item.
  */
 public record SubcategorySummary(
         String marketKey,

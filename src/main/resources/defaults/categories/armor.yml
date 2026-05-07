@@ -1,5 +1,5 @@
 # Default membership list for the armor category.
-# Copied to plugins/DivineMarketplace/categories/ on first install; server edits are preserved on reload.
+# Internal seed data converted into plugins/DivineMarketplace/categories.csv; this file is not copied directly.
 categoryId: armor
 items:
   - LEATHER_HELMET
@@ -34,3 +34,16 @@ items:
   - ELYTRA
   - SHIELD
   - WOLF_ARMOR
+
+  # Paper 1.21.11 material coverage additions.
+  - COPPER_BOOTS
+  - COPPER_CHESTPLATE
+  - COPPER_HELMET
+  - COPPER_HORSE_ARMOR
+  - COPPER_LEGGINGS
+  - COPPER_NAUTILUS_ARMOR
+  - DIAMOND_NAUTILUS_ARMOR
+  - GOLDEN_NAUTILUS_ARMOR
+  - IRON_NAUTILUS_ARMOR
+  - NETHERITE_HORSE_ARMOR
+  - NETHERITE_NAUTILUS_ARMOR

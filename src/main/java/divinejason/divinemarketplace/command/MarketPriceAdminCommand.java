@@ -4,14 +4,15 @@ package divinejason.divinemarketplace.command;
 /*
  * File role: Handles the market price admin command subcommand group and keeps its permission checks, parsing, and output in one file.
  */
-import org.bukkit.command.CommandSender;
-
+import divinejason.divinemarketplace.bootstrap.MarketReloadScope;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.EnumSet;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
+import org.bukkit.command.CommandSender;
 
 final class MarketPriceAdminCommand implements MarketAdminCommandHandler {
     private final MarketAdminCommandContext context;
@@ -30,7 +31,7 @@ final class MarketPriceAdminCommand implements MarketAdminCommandHandler {
     public void execute(CommandSender sender, String[] args) {
         String root = args[0].toLowerCase(Locale.ROOT);
         switch (root) {
-            case "reload" -> handleReload(sender);
+            case "reload" -> handleReload(sender, args);
             case "recalc" -> handleRecalc(sender, args);
             case "setprice" -> handleSetPrice(sender, args);
             default -> sender.sendRichMessage("<red>Unknown price/admin subcommand.</red>");
@@ -43,6 +44,7 @@ final class MarketPriceAdminCommand implements MarketAdminCommandHandler {
         return switch (root) {
             case "recalc" -> suggestRecalc(args);
             case "setprice" -> suggestSetPrice(args);
+            case "reload" -> suggestReload(sender, args);
             default -> List.of();
         };
     }
@@ -62,10 +64,42 @@ final class MarketPriceAdminCommand implements MarketAdminCommandHandler {
         return suggestions;
     }
 
-    private void handleReload(CommandSender sender) {
+    private void handleReload(CommandSender sender, String[] args) {
         context.require(sender, "divinemarketplace.admin.reload");
-        context.plugin.reloadRuntimeData();
-        sender.sendRichMessage("<green>DivineMarketplace runtime data reloaded.</green>");
+        EnumSet<MarketReloadScope> scopes = parseReloadScopes(args);
+        sender.sendRichMessage("<yellow>Reloading DivineMarketplace " + context.escapeMini(scopeLabel(scopes)) + " async...</yellow>");
+        context.plugin.reloadRuntimeDataAsync(scopes).whenComplete((ignored, throwable) ->
+                context.plugin.getServer().getScheduler().runTask(context.plugin, () -> {
+                    if (throwable != null) {
+                        sender.sendRichMessage("<red>Reload failed:</red> <gray>"
+                                + context.escapeMini(throwable.getMessage() == null ? throwable.getClass().getSimpleName() : throwable.getMessage())
+                                + "</gray>");
+                        return;
+                    }
+                    sender.sendRichMessage("<green>Reloaded DivineMarketplace " + context.escapeMini(scopeLabel(scopes)) + ".</green>");
+                }));
+    }
+
+    private EnumSet<MarketReloadScope> parseReloadScopes(String[] args) {
+        if (args.length < 2) {
+            return EnumSet.of(MarketReloadScope.CONFIG, MarketReloadScope.MENU);
+        }
+        EnumSet<MarketReloadScope> scopes = EnumSet.noneOf(MarketReloadScope.class);
+        for (int index = 1; index < args.length; index++) {
+            String token = args[index];
+            if ("all".equalsIgnoreCase(token)) {
+                scopes.add(MarketReloadScope.CONFIG);
+                scopes.add(MarketReloadScope.MENU);
+                scopes.add(MarketReloadScope.PRICES);
+                continue;
+            }
+            scopes.add(MarketReloadScope.fromToken(token));
+        }
+        return scopes.isEmpty() ? EnumSet.of(MarketReloadScope.CONFIG, MarketReloadScope.MENU) : scopes;
+    }
+
+    private String scopeLabel(Set<MarketReloadScope> scopes) {
+        return scopes.stream().map(scope -> scope.name().toLowerCase(Locale.ROOT)).sorted().toList().toString();
     }
 
     private void handleRecalc(CommandSender sender, String[] args) {
@@ -111,6 +145,16 @@ final class MarketPriceAdminCommand implements MarketAdminCommandHandler {
         context.priceRecommendationService.setManualRecommendedUnitPrice(marketKey, price);
         sender.sendRichMessage("<green>Set recommended price for</green> <white>" + context.escapeMini(marketKey)
                 + "</white> <green>to</green> <yellow>$" + MarketAdminCommandContext.MONEY_FORMAT.format(price / 100.0) + "</yellow>");
+    }
+
+
+    private Collection<String> suggestReload(CommandSender sender, String[] args) {
+        if (!context.hasAdminPermission(sender, "divinemarketplace.admin.reload")) {
+            return List.of();
+        }
+        return args.length >= 2
+                ? context.filterByPrefix(List.of("config", "menu", "prices", "all"), context.currentToken(args))
+                : List.of();
     }
 
     private Collection<String> suggestRecalc(String[] args) {

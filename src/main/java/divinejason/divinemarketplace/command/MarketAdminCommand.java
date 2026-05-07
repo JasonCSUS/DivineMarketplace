@@ -5,25 +5,24 @@ package divinejason.divinemarketplace.command;
  * File role: Handles the market admin command subcommand group and keeps its permission checks, parsing, and output in one file.
  */
 import divinejason.divinemarketplace.DivineMarketplace;
-import divinejason.divinemarketplace.auction.persistence.sqlite.SQLiteCustomEnchantStore;
-import divinejason.divinemarketplace.auction.persistence.sqlite.SQLiteCustomItemOverrideStore;
-import divinejason.divinemarketplace.auction.persistence.sqlite.SQLiteListingStore;
-import divinejason.divinemarketplace.auction.service.AdminHistoryExportService;
-import divinejason.divinemarketplace.auction.service.CustomItemCollisionLogService;
-import divinejason.divinemarketplace.auction.service.CustomItemMetadataLogService;
-import divinejason.divinemarketplace.auction.service.CustomItemRegistry;
-import divinejason.divinemarketplace.auction.service.CustomItemTypeExtractor;
-import divinejason.divinemarketplace.auction.service.DefaultAdminHistoryService;
-import divinejason.divinemarketplace.auction.service.FlattenedMarketIndexService;
-import divinejason.divinemarketplace.auction.service.MarketRecalculationService;
-import divinejason.divinemarketplace.auction.service.PriceRecommendationService;
-import divinejason.divinemarketplace.auction.service.StoredEnchantExtractor;
-import org.bukkit.command.CommandSender;
-
+import divinejason.divinemarketplace.auction.registry.custom.CustomItemCollisionLogService;
+import divinejason.divinemarketplace.auction.registry.custom.CustomItemMetadataLogService;
+import divinejason.divinemarketplace.auction.registry.custom.CustomItemRegistry;
+import divinejason.divinemarketplace.auction.service.admin.AdminHistoryExportService;
+import divinejason.divinemarketplace.auction.service.admin.DefaultAdminHistoryService;
+import divinejason.divinemarketplace.auction.service.category.FlattenedMarketIndexService;
+import divinejason.divinemarketplace.auction.service.enchant.DefaultEnchantmentMetadataService;
+import divinejason.divinemarketplace.auction.service.identity.CustomItemTypeExtractor;
+import divinejason.divinemarketplace.auction.service.identity.StoredEnchantExtractor;
+import divinejason.divinemarketplace.auction.service.pricing.MarketRecalculationService;
+import divinejason.divinemarketplace.auction.service.pricing.PriceRecommendationService;
+import divinejason.divinemarketplace.auction.storage.sqlite.SQLiteCustomItemOverrideStore;
+import divinejason.divinemarketplace.auction.storage.sqlite.SQLiteListingStore;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import java.util.Locale;
+import org.bukkit.command.CommandSender;
 
 /**
  * Public admin-command facade.
@@ -45,7 +44,7 @@ public final class MarketAdminCommand {
             PriceRecommendationService priceRecommendationService,
             CustomItemRegistry customItemRegistry,
             MarketRecalculationService marketRecalculationService,
-            SQLiteCustomEnchantStore customEnchantStore,
+            DefaultEnchantmentMetadataService enchantmentMetadataService,
             CustomItemTypeExtractor customItemTypeExtractor,
             CustomItemMetadataLogService metadataLogService,
             SQLiteCustomItemOverrideStore overrideStore,
@@ -61,7 +60,7 @@ public final class MarketAdminCommand {
                 priceRecommendationService,
                 customItemRegistry,
                 marketRecalculationService,
-                customEnchantStore,
+                enchantmentMetadataService,
                 customItemTypeExtractor,
                 metadataLogService,
                 overrideStore,

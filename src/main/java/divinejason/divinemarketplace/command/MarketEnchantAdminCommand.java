@@ -4,13 +4,12 @@ package divinejason.divinemarketplace.command;
 /*
  * File role: Handles the market enchant admin command subcommand group and keeps its permission checks, parsing, and output in one file.
  */
-import org.bukkit.command.CommandSender;
-
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
+import org.bukkit.command.CommandSender;
 
 final class MarketEnchantAdminCommand implements MarketAdminCommandHandler {
     private static final Set<String> ENCHANT_TARGET_ALIASES = Set.of(
@@ -74,8 +73,7 @@ final class MarketEnchantAdminCommand implements MarketAdminCommandHandler {
             return;
         }
 
-        context.customEnchantStore.upsert(parsed.namespacedEnchantKey(), parsed.displayName(), parsed.itemTokens());
-        context.plugin.reloadRuntimeData();
+        context.enchantmentMetadataService.upsert(parsed.namespacedEnchantKey(), parsed.displayName(), parsed.itemTokens());
         sender.sendRichMessage("<green>Stored custom enchant definition for</green> <white>" + context.escapeMini(parsed.namespacedEnchantKey())
                 + "</white> <gray>targets=" + context.escapeMini(String.join(", ", parsed.itemTokens())) + "</gray>");
     }

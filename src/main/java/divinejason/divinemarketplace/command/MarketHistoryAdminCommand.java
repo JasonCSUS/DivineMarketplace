@@ -5,17 +5,16 @@ package divinejason.divinemarketplace.command;
  * File role: Handles the market history admin command subcommand group and keeps its permission checks, parsing, and output in one file.
  */
 import divinejason.divinemarketplace.auction.model.AdminTransactionRecord;
-import org.bukkit.Bukkit;
-import org.bukkit.OfflinePlayer;
-import org.bukkit.command.CommandSender;
-import org.bukkit.entity.Player;
-
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import java.util.Locale;
 import java.util.UUID;
+import org.bukkit.Bukkit;
+import org.bukkit.OfflinePlayer;
+import org.bukkit.command.CommandSender;
+import org.bukkit.entity.Player;
 
 final class MarketHistoryAdminCommand implements MarketAdminCommandHandler {
     private final MarketAdminCommandContext context;

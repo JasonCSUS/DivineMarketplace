@@ -5,11 +5,10 @@ package divinejason.divinemarketplace.command;
  * File role: Handles the market review admin command subcommand group and keeps its permission checks, parsing, and output in one file.
  */
 import divinejason.divinemarketplace.auction.model.FlattenedMarketIndexEntry;
-import org.bukkit.command.CommandSender;
-
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
+import org.bukkit.command.CommandSender;
 
 final class MarketReviewAdminCommand implements MarketAdminCommandHandler {
     private final MarketAdminCommandContext context;

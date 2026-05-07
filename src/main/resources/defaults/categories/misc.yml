@@ -1,5 +1,5 @@
 # Default membership list for the misc category.
-# Copied to plugins/DivineMarketplace/categories/ on first install; server edits are preserved on reload.
+# Internal seed data converted into plugins/DivineMarketplace/categories.csv; this file is not copied directly.
 categoryId: misc
 items:
   - MUSIC_DISC_13
@@ -82,3 +82,38 @@ items:
   - OMINOUS_TRIAL_KEY
   - HEART_OF_THE_SEA
   - NETHER_STAR
+
+  # Paper 1.21.11 material coverage additions.
+  - AXOLOTL_BUCKET
+  - BLACK_BUNDLE
+  - BLUE_BUNDLE
+  - BROWN_BUNDLE
+  - BUCKET
+  - COD_BUCKET
+  - CYAN_BUNDLE
+  - END_CRYSTAL
+  - ENDER_EYE
+  - FLOW_BANNER_PATTERN
+  - GRAY_BUNDLE
+  - GREEN_BUNDLE
+  - GUSTER_BANNER_PATTERN
+  - LAVA_BUCKET
+  - LIGHT_BLUE_BUNDLE
+  - LIGHT_GRAY_BUNDLE
+  - LIME_BUNDLE
+  - MAGENTA_BUNDLE
+  - MILK_BUCKET
+  - MUSIC_DISC_LAVA_CHICKEN
+  - MUSIC_DISC_TEARS
+  - ORANGE_BUNDLE
+  - PINK_BUNDLE
+  - POWDER_SNOW_BUCKET
+  - PUFFERFISH_BUCKET
+  - PURPLE_BUNDLE
+  - RED_BUNDLE
+  - SALMON_BUCKET
+  - TADPOLE_BUCKET
+  - TROPICAL_FISH_BUCKET
+  - WATER_BUCKET
+  - WHITE_BUNDLE
+  - YELLOW_BUNDLE

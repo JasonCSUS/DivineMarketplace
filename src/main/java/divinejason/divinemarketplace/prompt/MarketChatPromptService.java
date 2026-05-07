@@ -6,20 +6,13 @@ package divinejason.divinemarketplace.prompt;
  */
 import divinejason.divinemarketplace.auction.model.ItemClaimRecord;
 import divinejason.divinemarketplace.auction.model.ListingCreateResult;
-import divinejason.divinemarketplace.auction.service.ClaimService;
-import divinejason.divinemarketplace.auction.service.ListingService;
+import divinejason.divinemarketplace.auction.service.claim.ClaimService;
+import divinejason.divinemarketplace.auction.service.listing.ListingService;
 import divinejason.divinemarketplace.menu.MenuController;
 import divinejason.divinemarketplace.menu.MenuDataFacade;
 import divinejason.divinemarketplace.menu.MenuSession;
 import divinejason.divinemarketplace.menu.MenuView;
 import io.papermc.paper.event.player.AsyncChatEvent;
-import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
-import org.bukkit.entity.Player;
-import org.bukkit.event.EventHandler;
-import org.bukkit.event.Listener;
-import org.bukkit.inventory.ItemStack;
-import org.bukkit.plugin.java.JavaPlugin;
-
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.text.DecimalFormat;
@@ -28,6 +21,12 @@ import java.util.Objects;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
+import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
+import org.bukkit.entity.Player;
+import org.bukkit.event.EventHandler;
+import org.bukkit.event.Listener;
+import org.bukkit.inventory.ItemStack;
+import org.bukkit.plugin.java.JavaPlugin;
 
 /**
  * Handles short-lived per-player chat prompts for market actions that need free-form numbers.
@@ -199,6 +198,7 @@ public final class MarketChatPromptService implements Listener {
         }
 
         pendingPrompts.remove(player.getUniqueId(), prompt);
+        menuController.invalidation().markListingInventoryChanged();
         sendListingSuccess(player, result, input.unitPriceHundredths());
         reopen(player, prompt.returnOnSuccess());
     }
@@ -230,6 +230,7 @@ public final class MarketChatPromptService implements Listener {
         }
 
         pendingPrompts.remove(player.getUniqueId(), prompt);
+        menuController.invalidation().markListingAndClaimsChanged();
         sendRelistSuccess(player, result, input.unitPriceHundredths());
 
         ItemClaimRecord remainingClaim = dataFacade.getPlayerItemClaimById(player.getUniqueId(), claim.claimId());

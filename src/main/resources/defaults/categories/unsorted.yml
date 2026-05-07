@@ -1,4 +1,4 @@
 # Default membership list for the unsorted category.
-# Copied to plugins/DivineMarketplace/categories/ on first install; server edits are preserved on reload.
+# Internal seed data converted into plugins/DivineMarketplace/categories.csv; this file is not copied directly.
 categoryId: unsorted
 items:

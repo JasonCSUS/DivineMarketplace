@@ -6,11 +6,10 @@ package divinejason.divinemarketplace.listener;
  */
 import divinejason.divinemarketplace.menu.MenuSessionManager;
 import divinejason.divinemarketplace.prompt.MarketChatPromptService;
+import java.util.Objects;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.player.PlayerQuitEvent;
-
-import java.util.Objects;
 
 /**
  * Handles player-scoped cleanup for menu sessions and pending chat prompts.

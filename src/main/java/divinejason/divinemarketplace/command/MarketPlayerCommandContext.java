@@ -5,20 +5,17 @@ package divinejason.divinemarketplace.command;
  * File role: Carries the dependencies needed by market player command handlers so command code does not pull directly from the plugin singleton.
  */
 import divinejason.divinemarketplace.auction.model.SortMode;
-import divinejason.divinemarketplace.auction.persistence.sqlite.SQLiteListingStore;
-import divinejason.divinemarketplace.auction.service.CategoryService;
-import divinejason.divinemarketplace.auction.service.ClaimService;
-import divinejason.divinemarketplace.auction.service.FlattenedMarketIndexService;
-import divinejason.divinemarketplace.auction.service.HistoryService;
-import divinejason.divinemarketplace.auction.service.ItemIdentityResolver;
-import divinejason.divinemarketplace.auction.service.ListingService;
-import divinejason.divinemarketplace.auction.service.PriceRecommendationService;
+import divinejason.divinemarketplace.auction.service.category.CategoryService;
+import divinejason.divinemarketplace.auction.service.category.FlattenedMarketIndexService;
+import divinejason.divinemarketplace.auction.service.claim.ClaimService;
+import divinejason.divinemarketplace.auction.service.history.HistoryService;
+import divinejason.divinemarketplace.auction.service.identity.ItemIdentityResolver;
+import divinejason.divinemarketplace.auction.service.listing.ListingService;
+import divinejason.divinemarketplace.auction.service.pricing.PriceRecommendationService;
+import divinejason.divinemarketplace.auction.storage.sqlite.SQLiteListingStore;
 import divinejason.divinemarketplace.config.ConfigService;
 import divinejason.divinemarketplace.menu.MenuController;
 import divinejason.divinemarketplace.prompt.MarketChatPromptService;
-import org.bukkit.command.CommandSender;
-import org.bukkit.entity.Player;
-
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.text.DecimalFormat;
@@ -26,6 +23,8 @@ import java.time.format.DateTimeFormatter;
 import java.util.Collection;
 import java.util.List;
 import java.util.Locale;
+import org.bukkit.command.CommandSender;
+import org.bukkit.entity.Player;
 
 final class MarketPlayerCommandContext {
     static final DecimalFormat MONEY_FORMAT = new DecimalFormat("0.00");

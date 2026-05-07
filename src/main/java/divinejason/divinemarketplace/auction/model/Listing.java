@@ -4,9 +4,8 @@ package divinejason.divinemarketplace.auction.model;
 /*
  * File role: Carries immutable listing data between marketplace services, persistence stores, commands, and GUI rendering.
  */
-import org.bukkit.inventory.ItemStack;
-
 import java.util.UUID;
+import org.bukkit.inventory.ItemStack;
 
 /**
  * Active market listing snapshot.

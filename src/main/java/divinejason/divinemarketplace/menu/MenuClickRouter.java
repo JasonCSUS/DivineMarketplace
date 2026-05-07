@@ -8,16 +8,17 @@ import divinejason.divinemarketplace.auction.model.ClaimItemResult;
 import divinejason.divinemarketplace.auction.model.ClaimMoneyResult;
 import divinejason.divinemarketplace.auction.model.Listing;
 import divinejason.divinemarketplace.auction.model.PurchaseResult;
-import divinejason.divinemarketplace.auction.service.ClaimService;
-import divinejason.divinemarketplace.auction.service.ListingService;
-import divinejason.divinemarketplace.auction.service.PurchaseService;
+import divinejason.divinemarketplace.auction.service.claim.ClaimService;
+import divinejason.divinemarketplace.auction.service.listing.ListingService;
+import divinejason.divinemarketplace.auction.service.purchase.PurchaseService;
+import divinejason.divinemarketplace.concurrency.MarketActionGate;
 import divinejason.divinemarketplace.prompt.MarketChatPromptService;
-import org.bukkit.entity.Player;
-import org.bukkit.event.inventory.ClickType;
-
 import java.time.YearMonth;
 import java.util.List;
 import java.util.UUID;
+import java.util.function.BooleanSupplier;
+import org.bukkit.entity.Player;
+import org.bukkit.event.inventory.ClickType;
 
 /** Routes render-time menu actions. Mutations always re-fetch live data first. */
 public final class MenuClickRouter {
@@ -28,6 +29,8 @@ public final class MenuClickRouter {
     private final ClaimService claimService;
     private final PurchaseService purchaseService;
     private final MarketChatPromptService chatPromptService;
+    private final MarketActionGate actionGate;
+    private final BooleanSupplier readinessCheck;
 
     public MenuClickRouter(
             MenuSessionManager sessionManager,
@@ -36,7 +39,9 @@ public final class MenuClickRouter {
             ListingService listingService,
             ClaimService claimService,
             PurchaseService purchaseService,
-            MarketChatPromptService chatPromptService
+            MarketChatPromptService chatPromptService,
+            MarketActionGate actionGate,
+            BooleanSupplier readinessCheck
     ) {
         this.sessionManager = sessionManager;
         this.menuController = menuController;
@@ -45,11 +50,17 @@ public final class MenuClickRouter {
         this.claimService = claimService;
         this.purchaseService = purchaseService;
         this.chatPromptService = chatPromptService;
+        this.actionGate = actionGate;
+        this.readinessCheck = readinessCheck;
     }
 
     public void handleClick(Player player, MarketMenuHolder holder, int rawSlot, ClickType clickType) {
+        if (!readinessCheck.getAsBoolean()) {
+            player.sendRichMessage("<yellow>The market is still loading. Try again in a moment.</yellow>");
+            return;
+        }
         MenuSession session = sessionManager.getOrCreate(player.getUniqueId());
-        if (session.actionLocked()) {
+        if (session.actionLocked() || actionGate.isPlayerLocked(player.getUniqueId())) {
             return;
         }
         MenuAction action = sessionManager.getAction(player.getUniqueId(), rawSlot).orElse(MenuAction.none());
@@ -189,9 +200,10 @@ public final class MenuClickRouter {
                 return;
             }
 
+            menuController.invalidation().markListingPurchaseCompleted();
             player.sendRichMessage("<green>Purchased</green> <white>" + escapeMini(result.marketDisplayName()) + "</white> <gray>x" + result.quantityPurchased() + ".</gray> <yellow>Items were moved to your claims.</yellow>");
             unlockAndRefresh(player);
-        });
+        }, resourceKey("listing", session.selectedListingId()));
     }
 
     private void cancelListing(Player player, MenuSession session) {
@@ -204,9 +216,10 @@ public final class MenuClickRouter {
             }
 
             listingService.cancelListing(player, listingId);
+            menuController.invalidation().markListingAndClaimsChanged();
             player.sendRichMessage("<green>Listing cancelled.</green> <gray>The item was moved to the seller's claims.</gray>");
             menuController.open(player, session.backOrMain());
-        });
+        }, resourceKey("listing", session.selectedListingId()));
     }
 
     private void claimOneChunk(Player player, MenuSession session) {
@@ -217,9 +230,10 @@ public final class MenuClickRouter {
                 return;
             }
             ClaimItemResult result = claimService.claimOneChunk(player, session.selectedClaimId());
+            if (result.success()) menuController.invalidation().markClaimStateChanged();
             sendClaimItemResult(player, result);
             unlockAfterClaim(player, result);
-        });
+        }, resourceKey("item-claim", session.selectedClaimId()));
     }
 
     private void claimAsMuchAsFits(Player player, MenuSession session) {
@@ -230,9 +244,10 @@ public final class MenuClickRouter {
                 return;
             }
             ClaimItemResult result = claimService.claimAsMuchAsFits(player, session.selectedClaimId());
+            if (result.success()) menuController.invalidation().markClaimStateChanged();
             sendClaimItemResult(player, result);
             unlockAfterClaim(player, result);
-        });
+        }, resourceKey("item-claim", session.selectedClaimId()));
     }
 
     private void claimEarnings(Player player, MenuSession session) {
@@ -243,10 +258,11 @@ public final class MenuClickRouter {
             } else if (result.empty()) {
                 player.sendRichMessage("<yellow>You do not have pending earnings.</yellow>");
             } else {
+                menuController.invalidation().markClaimStateChanged();
                 player.sendRichMessage("<green>Claimed earnings:</green> <yellow>$" + formatMoney(result.claimedAmount()) + "</yellow>");
             }
             unlockAndRefresh(player);
-        });
+        }, resourceKey("money-claim", player.getUniqueId()));
     }
 
 
@@ -278,7 +294,13 @@ public final class MenuClickRouter {
         return String.format(java.util.Locale.US, "%.2f", hundredths / 100.0);
     }
 
-    private void runLocked(Player player, MenuSession session, Runnable action) {
+    private void runLocked(Player player, MenuSession session, Runnable action, String... resourceKeys) {
+        var permit = actionGate.tryAcquire(player.getUniqueId(), resourceKeys);
+        if (permit.isEmpty()) {
+            player.sendRichMessage("<yellow>That market action is already being processed.</yellow>");
+            return;
+        }
+
         sessionManager.save(session.withActionLocked(true));
         try {
             action.run();
@@ -290,7 +312,12 @@ public final class MenuClickRouter {
             if (current.actionLocked()) {
                 sessionManager.save(current.withActionLocked(false));
             }
+            permit.get().close();
         }
+    }
+
+    private String resourceKey(String type, UUID id) {
+        return id == null ? null : type + ":" + id;
     }
 
     private void unlockAndRefresh(Player player) {

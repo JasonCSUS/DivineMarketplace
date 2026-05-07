@@ -7,12 +7,11 @@ package divinejason.divinemarketplace.command;
 import divinejason.divinemarketplace.auction.model.EnchantBrowseGroup;
 import divinejason.divinemarketplace.menu.MenuSession;
 import divinejason.divinemarketplace.menu.MenuView;
-import org.bukkit.command.CommandSender;
-import org.bukkit.entity.Player;
-
 import java.util.Collection;
 import java.util.List;
 import java.util.Locale;
+import org.bukkit.command.CommandSender;
+import org.bukkit.entity.Player;
 
 final class MarketBrowseCommandHandler implements MarketPlayerCommandHandler {
     private final MarketPlayerCommandContext context;

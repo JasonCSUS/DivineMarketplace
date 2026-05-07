@@ -1,336 +1,395 @@
 package divinejason.divinemarketplace.menu;
 
-
 /*
- * File role: Builds Bukkit inventories from MenuSession state and returns the matching slot-action map for the listener.
+ * Layer : gui/render
+ * Owns  : Bukkit Inventory rendering from already-prepared PageModel data.
+ * Calls : MenuItemFactory, MenuTemplateRegistry, MenuPageCache, PageModelBuilder, menu/template/*.
+ * Avoids: market mutations, SQL, purchase/claim/listing business rules.
+ * Threading: render(...) must run on the Bukkit main thread because it creates
+ *            Inventories and ItemStacks. Cacheable PageModel data is plain Java.
  */
+
 import divinejason.divinemarketplace.auction.model.CategorySummary;
-import divinejason.divinemarketplace.auction.model.EnchantBrowseGroup;
 import divinejason.divinemarketplace.auction.model.EnchantBrowseSummary;
 import divinejason.divinemarketplace.auction.model.ItemClaimRecord;
 import divinejason.divinemarketplace.auction.model.Listing;
 import divinejason.divinemarketplace.auction.model.RecommendationHistoryPoint;
 import divinejason.divinemarketplace.auction.model.SaleRecord;
 import divinejason.divinemarketplace.auction.model.SubcategorySummary;
-import org.bukkit.Bukkit;
-import org.bukkit.entity.Player;
-import org.bukkit.inventory.Inventory;
-
-import java.time.YearMonth;
+import divinejason.divinemarketplace.menu.model.PageModel;
+import divinejason.divinemarketplace.menu.template.AdminControlsTemplate;
+import divinejason.divinemarketplace.menu.template.BorderTemplate;
+import divinejason.divinemarketplace.menu.template.ConfirmCancelTemplate;
+import divinejason.divinemarketplace.menu.template.MenuRenderContext;
+import divinejason.divinemarketplace.menu.template.MenuSubTemplate;
+import divinejason.divinemarketplace.menu.template.PaginationFooterTemplate;
+import divinejason.divinemarketplace.menu.template.PlayerSummaryHeaderTemplate;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import org.bukkit.Bukkit;
+import org.bukkit.entity.Player;
+import org.bukkit.inventory.Inventory;
+import org.bukkit.inventory.ItemStack;
 
 /**
- * Builds inventories from MenuSession state + menu-ready data.
+ * Combines a full-screen template, cached static chrome, and a PageModel into
+ * one Bukkit inventory plus a slot-action map.
  *
- * Renderer rules:
- * - no buying/cancelling/claiming logic here
- * - every render returns a matching slot-action map
- * - listing and claim details always re-fetch from the live stores
+ * <p>Common chrome (border fill, back button, pagination arrows, earnings header) is
+ * applied via {@link divinejason.divinemarketplace.menu.template.MenuSubTemplate} chunks at
+ * the top of each render method.  The expensive data-selection step is isolated in
+ * {@link PageModelBuilder} and cacheable models are stored in {@link MenuPageCache}.</p>
  */
 public final class MenuRenderer {
     private static final int DEFAULT_SIZE = 54;
-    private static final String ADMIN_PERMISSION = "divinemarketplace.admin";
-    private static final String ADMIN_CANCEL_PERMISSION = "divinemarketplace.admin.listing.cancel";
 
     private final MenuDataFacade dataFacade;
-    private final MenuItemFactory itemFactory;
     private final MenuVisualConfig visuals;
+    private final MenuDataVersion dataVersion;
+    private final MenuPageCache pageCache;
+    private final MenuTemplateRegistry templates;
+    private final PageModelBuilder pageModelBuilder;
+    private final MenuRenderContext ctx;
 
-    public MenuRenderer(MenuDataFacade dataFacade, MenuItemFactory itemFactory, MenuVisualConfig visuals) {
-        this.dataFacade = dataFacade;
-        this.itemFactory = itemFactory;
-        this.visuals = visuals;
+    public MenuRenderer(MenuDataFacade dataFacade,
+                        MenuItemFactory itemFactory,
+                        MenuVisualConfig visuals,
+                        MenuDataVersion dataVersion,
+                        MenuPageCache pageCache,
+                        PageModelBuilder pageModelBuilder) {
+        this.dataFacade       = dataFacade;
+        this.visuals          = visuals;
+        this.dataVersion      = dataVersion;
+        this.pageCache        = pageCache;
+        this.templates        = new MenuTemplateRegistry(visuals);
+        this.pageModelBuilder = pageModelBuilder;
+        this.ctx = new MenuRenderContext(new MenuStaticButtonCache(itemFactory), itemFactory, visuals);
     }
 
     public MenuRenderResult render(Player player, MenuSession session) {
-        Inventory inventory = Bukkit.createInventory(
-                new MarketMenuHolder(session.currentView(), contextKey(session)),
-                DEFAULT_SIZE,
-                title(session)
-        );
-        Map<Integer, MenuAction> actions = new LinkedHashMap<>();
-        fill(inventory);
+        MenuTemplate template = template(session);
+        String cacheKey = PageModelBuilder.cacheKey(session);
+        PageModel model = loadPageModel(player, session, template, cacheKey);
+        return renderPrepared(player, session, model);
+    }
 
-        switch (session.currentView()) {
-            case MAIN -> renderMain(inventory, actions, player, session);
-            case CATEGORY_BROWSER -> renderCategoryBrowser(inventory, actions, session);
-            case SEARCH_RESULTS -> renderSearchResults(inventory, actions, session);
-            case LISTING_BROWSER -> renderListingBrowser(inventory, actions, session);
-            case ITEM_DETAIL -> renderItemDetail(inventory, actions, player, session);
-            case MY_LISTINGS -> renderMyListings(inventory, actions, player, session);
-            case CLAIMS -> renderClaims(inventory, actions, player, session);
-            case CLAIM_DETAIL -> renderClaimDetail(inventory, actions, player, session);
-            case SALE_HISTORY -> renderSaleHistory(inventory, actions, session);
-            case PRICE_HISTORY -> renderPriceHistory(inventory, actions, session);
-        }
+    /** Returns the current visual template for the session's view. */
+    public MenuTemplate template(MenuSession session) {
+        MenuTemplate template = templates.get(session.currentView());
+        return template == null ? MenuTemplate.empty() : template;
+    }
+
+    /** Returns true if this view is globally cacheable and can be prepared async. */
+    public boolean canPrepareAsync(MenuSession session) {
+        return template(session).cacheable();
+    }
+
+    /** Renders a previously prepared plain PageModel on the main server thread. */
+    public MenuRenderResult renderPrepared(Player player, MenuSession session, PageModel model) {
+        String cacheKey = PageModelBuilder.cacheKey(session);
+        Inventory inventory = Bukkit.createInventory(
+                new MarketMenuHolder(session.currentView(), cacheKey), DEFAULT_SIZE, title(session));
+        Map<Integer, MenuAction> actions = new LinkedHashMap<>();
+        renderModel(inventory, actions, session, model);
         return new MenuRenderResult(inventory, actions);
     }
 
-    private void renderMain(Inventory inventory, Map<Integer, MenuAction> actions, Player player, MenuSession session) {
-        put(inventory, actions, visuals.slot("main.myListings", MenuSlots.MAIN_MY_LISTINGS), itemFactory.infoItem("<gold>My Listings</gold>", List.of("<gray>View your active listings.</gray>")), MenuAction.openView(MenuView.MY_LISTINGS));
-        put(inventory, actions, visuals.slot("main.claims", MenuSlots.MAIN_CLAIMS), itemFactory.infoItem("<gold>Claims</gold>", List.of("<gray>View pending item claims.</gray>")), MenuAction.openView(MenuView.CLAIMS));
-        put(inventory, actions, visuals.slot("main.claimEarnings", MenuSlots.MAIN_CLAIM_EARNINGS), itemFactory.claimEarningsButton(dataFacade.getPlayerMoneyClaimBalance(player.getUniqueId())), MenuAction.simple(MenuActionType.CLAIM_EARNINGS));
-        put(inventory, actions, visuals.slot("main.listHeldItem", MenuSlots.MAIN_LIST_HELD_ITEM), itemFactory.listHeldItemButton(), MenuAction.simple(MenuActionType.START_LISTING_PROMPT));
-        put(inventory, actions, visuals.slot("main.search", MenuSlots.MAIN_SEARCH), itemFactory.searchButton(), MenuAction.simple(MenuActionType.START_SEARCH_PROMPT));
-        put(inventory, actions, visuals.slot("main.allListings", MenuSlots.MAIN_ALL_LISTINGS), itemFactory.infoItem("<gold>All Listings</gold>", List.of("<gray>Browse every active listing.</gray>")), MenuAction.token(MenuActionType.OPEN_MARKET_GROUP, null));
+    /** Lightweight shell shown while a heavy cacheable page model is prepared async. */
+    public MenuRenderResult renderLoading(MenuSession session) {
+        String cacheKey = PageModelBuilder.cacheKey(session) + ":loading";
+        Inventory inventory = Bukkit.createInventory(
+                new MarketMenuHolder(session.currentView(), cacheKey), DEFAULT_SIZE, title(session));
+        Map<Integer, MenuAction> dummyActions = new LinkedHashMap<>();
+        BorderTemplate.WITHOUT_BACK.apply(inventory, dummyActions, ctx);
+        inventory.setItem(22, ctx.itemFactory().infoItem("<yellow>Loading market page...</yellow>",
+                List.of("<gray>The market is preparing this page from cached data.</gray>")));
+        return new MenuRenderResult(inventory, Map.of());
+    }
+
+    private PageModel loadPageModel(Player player, MenuSession session, MenuTemplate template, String cacheKey) {
+        if (template.cacheable()) {
+            MenuDataVersionSnapshot current = dataVersion.snapshot();
+            PageModel cached = pageCache.get(cacheKey, current, template.watchedDomains());
+            if (cached != null) {
+                return cached;
+            }
+
+            PageModel built = pageModelBuilder.build(player, session, template.pageSize());
+            pageCache.put(cacheKey, built, current);
+            return built;
+        }
+        return pageModelBuilder.build(player, session, template.pageSize());
+    }
+
+    private void renderModel(Inventory inventory,
+                             Map<Integer, MenuAction> actions,
+                             MenuSession session,
+                             PageModel model) {
+        switch (model) {
+            case PageModel.Main main -> renderMain(inventory, actions, main);
+            case PageModel.CategoryBrowser category -> renderCategoryBrowser(inventory, actions, category);
+            case PageModel.SearchResults search -> renderSearchResults(inventory, actions, search);
+            case PageModel.ListingBrowser listings -> renderListingBrowser(inventory, actions, session, listings);
+            case PageModel.ItemDetail detail -> renderItemDetail(inventory, actions, detail);
+            case PageModel.MyListings myListings -> renderMyListings(inventory, actions, myListings);
+            case PageModel.ClaimsPage claims -> renderClaims(inventory, actions, claims);
+            case PageModel.ClaimDetail claim -> renderClaimDetail(inventory, actions, claim);
+            case PageModel.SaleHistory sales -> renderSaleHistory(inventory, actions, sales);
+            case PageModel.PriceHistory prices -> renderPriceHistory(inventory, actions, prices);
+        }
+    }
+
+    private void renderMain(Inventory inventory, Map<Integer, MenuAction> actions, PageModel.Main model) {
+        BorderTemplate.WITHOUT_BACK.apply(inventory, actions, ctx);
+        new PlayerSummaryHeaderTemplate(model.playerBalanceHundredths(),
+                "main.claimEarnings", MenuSlots.MAIN_CLAIM_EARNINGS).apply(inventory, actions, ctx);
+
+        put(inventory, actions, visuals.slot("main.myListings", MenuSlots.MAIN_MY_LISTINGS),
+                ctx.itemFactory().infoItem("<gold>My Listings</gold>", List.of("<gray>View your active listings.</gray>")),
+                MenuAction.openView(MenuView.MY_LISTINGS));
+        put(inventory, actions, visuals.slot("main.claims", MenuSlots.MAIN_CLAIMS),
+                ctx.itemFactory().infoItem("<gold>Claims</gold>", List.of("<gray>View pending item claims.</gray>")),
+                MenuAction.openView(MenuView.CLAIMS));
+        put(inventory, actions, visuals.slot("main.listHeldItem", MenuSlots.MAIN_LIST_HELD_ITEM),
+                ctx.itemFactory().listHeldItemButton(), MenuAction.simple(MenuActionType.START_LISTING_PROMPT));
+        put(inventory, actions, visuals.slot("main.search", MenuSlots.MAIN_SEARCH),
+                ctx.itemFactory().searchButton(), MenuAction.simple(MenuActionType.START_SEARCH_PROMPT));
+        put(inventory, actions, visuals.slot("main.allListings", MenuSlots.MAIN_ALL_LISTINGS),
+                ctx.itemFactory().infoItem("<gold>All Listings</gold>", List.of("<gray>Browse every active listing.</gray>")),
+                MenuAction.token(MenuActionType.OPEN_MARKET_GROUP, null));
 
         int[] slots = visuals.slotList("main.categories", MenuSlots.MAIN_CATEGORY_SLOTS);
-        MenuPage<CategorySummary> categories = dataFacade.getMainCategoriesPage(session.page(), slots.length);
-        for (int i = 0; i < categories.items().size() && i < slots.length; i++) {
-            CategorySummary category = categories.items().get(i);
-            put(inventory, actions, slots[i], itemFactory.categoryItem(category), MenuAction.token(MenuActionType.OPEN_CATEGORY, category.categoryId()));
+        List<CategorySummary> categories = model.categories();
+        for (int i = 0; i < categories.size() && i < slots.length; i++) {
+            CategorySummary category = categories.get(i);
+            put(inventory, actions, slots[i], ctx.itemFactory().categoryItem(category),
+                    MenuAction.token(MenuActionType.OPEN_CATEGORY, category.categoryId()));
         }
-        addPageButtons(inventory, actions, categories);
+        new PaginationFooterTemplate(model.hasPrevious(), model.hasNext()).apply(inventory, actions, ctx);
     }
 
-    private void renderCategoryBrowser(Inventory inventory, Map<Integer, MenuAction> actions, MenuSession session) {
-        putBack(inventory, actions);
-        if ("enchanted_books".equalsIgnoreCase(session.selectedCategoryId())) {
-            if (session.selectedEnchantGroup() == null || session.selectedEnchantGroup().isBlank()) {
-                renderEnchantTargets(inventory, actions, session);
-            } else {
-                renderEnchantMarketGroups(inventory, actions, session);
+    private void renderCategoryBrowser(Inventory inventory,
+                                       Map<Integer, MenuAction> actions,
+                                       PageModel.CategoryBrowser model) {
+        BorderTemplate.WITH_BACK.apply(inventory, actions, ctx);
+        int[] slots = visuals.slotList("category.groups", MenuSlots.CATEGORY_BROWSER_SLOTS);
+
+        if (model.enchantTargets() != null) {
+            List<EnchantBrowseSummary> targets = model.enchantTargets();
+            if (targets.isEmpty()) {
+                inventory.setItem(22, ctx.itemFactory().infoItem("<yellow>No enchant groups</yellow>",
+                        List.of("<gray>No active enchanted books were found.</gray>")));
+                new PaginationFooterTemplate(model.hasPrevious(), model.hasNext()).apply(inventory, actions, ctx);
+                return;
             }
+            for (int i = 0; i < targets.size() && i < slots.length; i++) {
+                EnchantBrowseSummary target = targets.get(i);
+                put(inventory, actions, slots[i], ctx.itemFactory().enchantTargetItem(target),
+                        MenuAction.token(MenuActionType.OPEN_ENCHANT_TARGET, target.group().commandToken()));
+            }
+            new PaginationFooterTemplate(model.hasPrevious(), model.hasNext()).apply(inventory, actions, ctx);
             return;
         }
 
-        int[] slots = visuals.slotList("category.groups", MenuSlots.CATEGORY_BROWSER_SLOTS);
-        MenuPage<SubcategorySummary> groups = dataFacade.getMarketGroupsForCategoryPage(session.selectedCategoryId(), session.page(), slots.length);
+        List<SubcategorySummary> groups = model.groups() == null ? List.of() : model.groups();
         if (groups.isEmpty()) {
-            inventory.setItem(22, itemFactory.infoItem("<yellow>No groups</yellow>", List.of("<gray>No active listings were found in this category.</gray>")));
-            addPageButtons(inventory, actions, groups);
+            inventory.setItem(22, ctx.itemFactory().infoItem("<yellow>No groups</yellow>",
+                    List.of("<gray>No active listings were found in this category.</gray>")));
+            new PaginationFooterTemplate(model.hasPrevious(), model.hasNext()).apply(inventory, actions, ctx);
             return;
         }
-        for (int i = 0; i < groups.items().size() && i < slots.length; i++) {
-            SubcategorySummary group = groups.items().get(i);
-            put(inventory, actions, slots[i], itemFactory.marketGroupItem(group), MenuAction.token(MenuActionType.OPEN_MARKET_GROUP, group.marketKey()));
+        for (int i = 0; i < groups.size() && i < slots.length; i++) {
+            SubcategorySummary group = groups.get(i);
+            put(inventory, actions, slots[i], ctx.itemFactory().marketGroupItem(group),
+                    MenuAction.token(MenuActionType.OPEN_MARKET_GROUP, group.marketKey()));
         }
-        addPageButtons(inventory, actions, groups);
+        new PaginationFooterTemplate(model.hasPrevious(), model.hasNext()).apply(inventory, actions, ctx);
     }
 
-    private void renderEnchantTargets(Inventory inventory, Map<Integer, MenuAction> actions, MenuSession session) {
+    private void renderSearchResults(Inventory inventory,
+                                     Map<Integer, MenuAction> actions,
+                                     PageModel.SearchResults model) {
+        BorderTemplate.WITH_BACK.apply(inventory, actions, ctx);
         int[] slots = visuals.slotList("category.groups", MenuSlots.CATEGORY_BROWSER_SLOTS);
-        MenuPage<EnchantBrowseSummary> groups = dataFacade.getEnchantedBookTargetGroupsPage(session.page(), slots.length);
+        List<SubcategorySummary> groups = model.groups();
         if (groups.isEmpty()) {
-            inventory.setItem(22, itemFactory.infoItem("<yellow>No enchant groups</yellow>", List.of("<gray>No active enchanted books were found.</gray>")));
-            addPageButtons(inventory, actions, groups);
+            inventory.setItem(22, ctx.itemFactory().infoItem("<yellow>No results</yellow>",
+                    List.of("<gray>Use Search or /market search &lt;query&gt;.</gray>")));
+            new PaginationFooterTemplate(model.hasPrevious(), model.hasNext()).apply(inventory, actions, ctx);
             return;
         }
-        for (int i = 0; i < groups.items().size() && i < slots.length; i++) {
-            EnchantBrowseSummary group = groups.items().get(i);
-            put(inventory, actions, slots[i], itemFactory.enchantTargetItem(group), MenuAction.token(MenuActionType.OPEN_ENCHANT_TARGET, group.group().commandToken()));
+        for (int i = 0; i < groups.size() && i < slots.length; i++) {
+            SubcategorySummary group = groups.get(i);
+            put(inventory, actions, slots[i], ctx.itemFactory().marketGroupItem(group),
+                    MenuAction.token(MenuActionType.OPEN_MARKET_GROUP, group.marketKey()));
         }
-        addPageButtons(inventory, actions, groups);
+        new PaginationFooterTemplate(model.hasPrevious(), model.hasNext()).apply(inventory, actions, ctx);
     }
 
-    private void renderEnchantMarketGroups(Inventory inventory, Map<Integer, MenuAction> actions, MenuSession session) {
-        int[] slots = visuals.slotList("category.groups", MenuSlots.CATEGORY_BROWSER_SLOTS);
-        EnchantBrowseGroup browseGroup = EnchantBrowseGroup.fromCommandToken(session.selectedEnchantGroup());
-        MenuPage<SubcategorySummary> books = dataFacade.getEnchantedBookMarketGroupsPage(browseGroup, session.page(), slots.length);
-        if (books.isEmpty()) {
-            inventory.setItem(22, itemFactory.infoItem("<yellow>No books</yellow>", List.of("<gray>No active books were found for this target.</gray>")));
-            addPageButtons(inventory, actions, books);
-            return;
-        }
-        for (int i = 0; i < books.items().size() && i < slots.length; i++) {
-            SubcategorySummary book = books.items().get(i);
-            put(inventory, actions, slots[i], itemFactory.marketGroupItem(book), MenuAction.token(MenuActionType.OPEN_MARKET_GROUP, book.marketKey()));
-        }
-        addPageButtons(inventory, actions, books);
-    }
+    private void renderListingBrowser(Inventory inventory,
+                                      Map<Integer, MenuAction> actions,
+                                      MenuSession session,
+                                      PageModel.ListingBrowser model) {
+        BorderTemplate.WITH_BACK.apply(inventory, actions, ctx);
+        put(inventory, actions, visuals.slot("listing.sort", MenuSlots.TOP_RIGHT),
+                ctx.itemFactory().sortButton(model.sortMode()), MenuAction.simple(MenuActionType.SORT_CYCLE));
 
-    private void renderSearchResults(Inventory inventory, Map<Integer, MenuAction> actions, MenuSession session) {
-        putBack(inventory, actions);
-        int[] slots = visuals.slotList("category.groups", MenuSlots.CATEGORY_BROWSER_SLOTS);
-        MenuPage<SubcategorySummary> groups = dataFacade.searchMarketGroupsPage(session.searchQuery(), session.page(), slots.length);
-        if (groups.isEmpty()) {
-            inventory.setItem(22, itemFactory.infoItem("<yellow>No search text</yellow>", List.of("<gray>Use the Search button or /market search &lt;query&gt;.</gray>")));
-            addPageButtons(inventory, actions, groups);
-            return;
-        }
-        for (int i = 0; i < groups.items().size() && i < slots.length; i++) {
-            SubcategorySummary group = groups.items().get(i);
-            put(inventory, actions, slots[i], itemFactory.marketGroupItem(group), MenuAction.token(MenuActionType.OPEN_MARKET_GROUP, group.marketKey()));
-        }
-        addPageButtons(inventory, actions, groups);
-    }
-
-    private void renderListingBrowser(Inventory inventory, Map<Integer, MenuAction> actions, MenuSession session) {
-        putBack(inventory, actions);
-        put(inventory, actions, visuals.slot("listing.sort", MenuSlots.TOP_RIGHT), itemFactory.sortButton(session.sortMode()), MenuAction.simple(MenuActionType.SORT_CYCLE));
         int[] slots = visuals.slotList("listing.listings", MenuSlots.LISTING_BROWSER_SLOTS);
-        MenuPage<Listing> listings = dataFacade.getListingsPage(session.selectedMarketKey(), session.sortMode(), session.page(), slots.length);
+        List<Listing> listings = model.listings();
         if (listings.isEmpty()) {
-            inventory.setItem(22, itemFactory.infoItem("<yellow>No listings</yellow>", List.of("<gray>No active listings were found here.</gray>")));
-            addPageButtons(inventory, actions, listings);
+            inventory.setItem(22, ctx.itemFactory().infoItem("<yellow>No listings</yellow>",
+                    List.of("<gray>No active listings were found here.</gray>")));
+            new PaginationFooterTemplate(model.hasPrevious(), model.hasNext()).apply(inventory, actions, ctx);
             return;
         }
-        for (int i = 0; i < listings.items().size() && i < slots.length; i++) {
-            Listing listing = listings.items().get(i);
-            put(inventory, actions, slots[i], itemFactory.listingItem(listing), MenuAction.uuid(MenuActionType.OPEN_LISTING, listing.listingId()));
+        for (int i = 0; i < listings.size() && i < slots.length; i++) {
+            Listing listing = listings.get(i);
+            put(inventory, actions, slots[i], ctx.itemFactory().listingItem(listing),
+                    MenuAction.uuid(MenuActionType.OPEN_LISTING, listing.listingId()));
         }
-        addPageButtons(inventory, actions, listings);
+        new PaginationFooterTemplate(model.hasPrevious(), model.hasNext()).apply(inventory, actions, ctx);
     }
 
-    private void renderItemDetail(Inventory inventory, Map<Integer, MenuAction> actions, Player player, MenuSession session) {
-        putBack(inventory, actions);
-        Listing listing = dataFacade.getListingById(session.selectedListingId());
+    private void renderItemDetail(Inventory inventory, Map<Integer, MenuAction> actions, PageModel.ItemDetail model) {
+        BorderTemplate.WITH_BACK.apply(inventory, actions, ctx);
+        Listing listing = model.listing();
         if (listing == null) {
-            inventory.setItem(22, itemFactory.listingUnavailableItem());
+            inventory.setItem(22, ctx.itemFactory().listingUnavailableItem());
             return;
         }
 
-        boolean ownsListing = player.getUniqueId().equals(listing.sellerUuid());
-        boolean mayAdminCancel = mayAdminCancel(player);
-        boolean canBuy = !ownsListing;
-        boolean canCancel = ownsListing || mayAdminCancel;
+        inventory.setItem(13, ctx.itemFactory().listingItem(listing));
+        new ConfirmCancelTemplate(listing, model.selectedQuantity(), model.canBuy(), model.canCancel())
+                .apply(inventory, actions, ctx);
+        AdminControlsTemplate.NONE.apply(inventory, actions, ctx);
 
-        int quantity = Math.max(1, Math.min(session.selectedQuantity(), listing.amount()));
-        inventory.setItem(13, itemFactory.listingItem(listing));
-
-        if (canBuy) {
-            put(inventory, actions, visuals.slot("detail.decrease", MenuSlots.ITEM_DETAIL_DECREASE), itemFactory.decreaseArrow(), MenuAction.simple(MenuActionType.QUANTITY_DECREASE));
-            inventory.setItem(visuals.slot("detail.quantity", MenuSlots.ITEM_DETAIL_QUANTITY), itemFactory.quantityPaper(quantity, listing.unitPrice(), listing.amount()));
-            put(inventory, actions, visuals.slot("detail.increase", MenuSlots.ITEM_DETAIL_INCREASE), itemFactory.increaseArrow(), MenuAction.simple(MenuActionType.QUANTITY_INCREASE));
-            put(inventory, actions, visuals.slot("detail.confirm", MenuSlots.ITEM_DETAIL_CONFIRM), itemFactory.confirmPurchaseButton(quantity, listing.unitPrice() * quantity), MenuAction.simple(MenuActionType.CONFIRM_PURCHASE));
-        } else {
-            inventory.setItem(visuals.slot("detail.quantity", MenuSlots.ITEM_DETAIL_QUANTITY), itemFactory.ownerListingInfo(listing));
-        }
-
-        if (canCancel) {
-            put(inventory, actions, visuals.slot("detail.cancel", MenuSlots.ITEM_DETAIL_CANCEL), itemFactory.cancelListingButton(), MenuAction.simple(MenuActionType.CANCEL_LISTING));
-        }
-
-        put(inventory, actions, visuals.slot("detail.saleHistory", MenuSlots.ITEM_DETAIL_SALE_HISTORY), itemFactory.saleHistoryButton(), MenuAction.simple(MenuActionType.OPEN_SALE_HISTORY));
-        put(inventory, actions, visuals.slot("detail.priceHistory", MenuSlots.ITEM_DETAIL_PRICE_HISTORY), itemFactory.priceHistoryButton(), MenuAction.simple(MenuActionType.OPEN_PRICE_HISTORY));
+        put(inventory, actions, visuals.slot("detail.saleHistory", MenuSlots.ITEM_DETAIL_SALE_HISTORY),
+                ctx.itemFactory().saleHistoryButton(), MenuAction.simple(MenuActionType.OPEN_SALE_HISTORY));
+        put(inventory, actions, visuals.slot("detail.priceHistory", MenuSlots.ITEM_DETAIL_PRICE_HISTORY),
+                ctx.itemFactory().priceHistoryButton(), MenuAction.simple(MenuActionType.OPEN_PRICE_HISTORY));
     }
 
-    private void renderMyListings(Inventory inventory, Map<Integer, MenuAction> actions, Player player, MenuSession session) {
-        putBack(inventory, actions);
+    private void renderMyListings(Inventory inventory, Map<Integer, MenuAction> actions, PageModel.MyListings model) {
+        BorderTemplate.WITH_BACK.apply(inventory, actions, ctx);
+        put(inventory, actions, visuals.slot("main.listHeldItem", MenuSlots.MAIN_LIST_HELD_ITEM),
+                ctx.itemFactory().listHeldItemButton(), MenuAction.simple(MenuActionType.START_LISTING_PROMPT));
+        inventory.setItem(visuals.slot("listing.capacity", MenuSlots.TOP_RIGHT),
+                ctx.itemFactory().listingCapacityInfo(model.listedCount(), model.maxListingSlots()));
+
         int[] slots = visuals.slotList("listing.listings", MenuSlots.LISTING_BROWSER_SLOTS);
-        MenuPage<Listing> listings = dataFacade.getPlayerListingsPage(player.getUniqueId(), session.page(), slots.length);
-        if (listings.isEmpty()) {
-            inventory.setItem(22, itemFactory.infoItem("<yellow>No listings</yellow>", List.of("<gray>You have no active listings.</gray>")));
-            addPageButtons(inventory, actions, listings);
-            return;
+        List<Listing> listings = model.listings();
+        int visibleListingSlots = Math.max(0, Math.min(slots.length, model.visibleListingSlots()));
+        for (int i = 0; i < visibleListingSlots; i++) {
+            if (i < listings.size()) {
+                Listing listing = listings.get(i);
+                put(inventory, actions, slots[i], ctx.itemFactory().listingItem(listing),
+                        MenuAction.uuid(MenuActionType.OPEN_LISTING, listing.listingId()));
+            } else {
+                inventory.clear(slots[i]);
+            }
         }
-        for (int i = 0; i < listings.items().size() && i < slots.length; i++) {
-            Listing listing = listings.items().get(i);
-            put(inventory, actions, slots[i], itemFactory.listingItem(listing), MenuAction.uuid(MenuActionType.OPEN_LISTING, listing.listingId()));
+        for (int i = visibleListingSlots; i < slots.length; i++) {
+            inventory.setItem(slots[i], ctx.staticCache().fillerBlack());
         }
-        addPageButtons(inventory, actions, listings);
+        new PaginationFooterTemplate(model.hasPrevious(), model.hasNext()).apply(inventory, actions, ctx);
     }
 
-    private void renderClaims(Inventory inventory, Map<Integer, MenuAction> actions, Player player, MenuSession session) {
-        putBack(inventory, actions);
-        put(inventory, actions, visuals.slot("claims.earnings", MenuSlots.CLAIMS_EARNINGS), itemFactory.claimEarningsButton(dataFacade.getPlayerMoneyClaimBalance(player.getUniqueId())), MenuAction.simple(MenuActionType.CLAIM_EARNINGS));
+    private void renderClaims(Inventory inventory, Map<Integer, MenuAction> actions, PageModel.ClaimsPage model) {
+        BorderTemplate.WITH_BACK.apply(inventory, actions, ctx);
+        new PlayerSummaryHeaderTemplate(model.playerBalanceHundredths(),
+                "claims.earnings", MenuSlots.CLAIMS_EARNINGS).apply(inventory, actions, ctx);
+
         int[] slots = visuals.slotList("claims.items", MenuSlots.CLAIM_SLOTS);
-        MenuPage<ItemClaimRecord> claims = dataFacade.getPlayerItemClaimsPage(player.getUniqueId(), session.page(), slots.length);
+        List<ItemClaimRecord> claims = model.claims();
         if (claims.isEmpty()) {
-            inventory.setItem(22, itemFactory.infoItem("<yellow>No item claims</yellow>", List.of("<gray>You do not have pending item claims.</gray>")));
-            addPageButtons(inventory, actions, claims);
+            inventory.setItem(22, ctx.itemFactory().infoItem("<yellow>No item claims</yellow>",
+                    List.of("<gray>You do not have pending item claims.</gray>")));
+            new PaginationFooterTemplate(model.hasPrevious(), model.hasNext()).apply(inventory, actions, ctx);
             return;
         }
-        for (int i = 0; i < claims.items().size() && i < slots.length; i++) {
-            ItemClaimRecord claim = claims.items().get(i);
-            put(inventory, actions, slots[i], itemFactory.claimItem(claim), MenuAction.uuid(MenuActionType.OPEN_CLAIM, claim.claimId()));
+        for (int i = 0; i < claims.size() && i < slots.length; i++) {
+            ItemClaimRecord claim = claims.get(i);
+            put(inventory, actions, slots[i], ctx.itemFactory().claimItem(claim),
+                    MenuAction.uuid(MenuActionType.OPEN_CLAIM, claim.claimId()));
         }
-        addPageButtons(inventory, actions, claims);
+        new PaginationFooterTemplate(model.hasPrevious(), model.hasNext()).apply(inventory, actions, ctx);
     }
 
-    private void renderClaimDetail(Inventory inventory, Map<Integer, MenuAction> actions, Player player, MenuSession session) {
-        putBack(inventory, actions);
-        ItemClaimRecord claim = dataFacade.getPlayerItemClaimById(player.getUniqueId(), session.selectedClaimId());
+    private void renderClaimDetail(Inventory inventory, Map<Integer, MenuAction> actions, PageModel.ClaimDetail model) {
+        BorderTemplate.WITH_BACK.apply(inventory, actions, ctx);
+        ItemClaimRecord claim = model.claim();
         if (claim == null) {
-            inventory.setItem(22, itemFactory.infoItem("<red>Claim unavailable</red>", List.of("<gray>This claim was already redeemed or no longer belongs to you.</gray>")));
+            inventory.setItem(22, ctx.itemFactory().infoItem("<red>Claim unavailable</red>",
+                    List.of("<gray>This claim was already redeemed or no longer belongs to you.</gray>")));
             return;
         }
 
-        inventory.setItem(13, itemFactory.claimItem(claim));
-        put(inventory, actions, visuals.slot("claimDetail.relist", MenuSlots.CLAIM_DETAIL_RELIST), itemFactory.relistClaimButton(claim), MenuAction.simple(MenuActionType.START_RELIST_PROMPT));
-        put(inventory, actions, visuals.slot("claimDetail.claimOne", MenuSlots.CLAIM_DETAIL_ONE_CHUNK), itemFactory.claimOneChunkButton(claim), MenuAction.simple(MenuActionType.CLAIM_ONE_CHUNK));
-        put(inventory, actions, visuals.slot("claimDetail.claimAll", MenuSlots.CLAIM_DETAIL_AS_MUCH_AS_FITS), itemFactory.claimAsMuchAsFitsButton(claim), MenuAction.simple(MenuActionType.CLAIM_AS_MUCH_AS_FITS));
+        inventory.setItem(13, ctx.itemFactory().claimItem(claim));
+        put(inventory, actions, visuals.slot("claimDetail.relist", MenuSlots.CLAIM_DETAIL_RELIST),
+                ctx.itemFactory().relistClaimButton(claim), MenuAction.simple(MenuActionType.START_RELIST_PROMPT));
+        put(inventory, actions, visuals.slot("claimDetail.claimOne", MenuSlots.CLAIM_DETAIL_ONE_CHUNK),
+                ctx.itemFactory().claimOneChunkButton(claim), MenuAction.simple(MenuActionType.CLAIM_ONE_CHUNK));
+        put(inventory, actions, visuals.slot("claimDetail.claimAll", MenuSlots.CLAIM_DETAIL_AS_MUCH_AS_FITS),
+                ctx.itemFactory().claimAsMuchAsFitsButton(claim), MenuAction.simple(MenuActionType.CLAIM_AS_MUCH_AS_FITS));
     }
 
-    private void renderSaleHistory(Inventory inventory, Map<Integer, MenuAction> actions, MenuSession session) {
-        putBack(inventory, actions);
+    private void renderSaleHistory(Inventory inventory, Map<Integer, MenuAction> actions, PageModel.SaleHistory model) {
+        BorderTemplate.WITH_BACK.apply(inventory, actions, ctx);
         int[] slots = visuals.slotList("history.entries", MenuSlots.HISTORY_SLOTS);
-        MenuPage<SaleRecord> sales = dataFacade.getSaleHistoryPage(session.selectedMarketKey(), session.page(), slots.length);
+        List<SaleRecord> sales = model.sales();
         if (sales.isEmpty()) {
-            inventory.setItem(22, itemFactory.infoItem("<yellow>No sales</yellow>", List.of("<gray>No sale history was found.</gray>")));
-            addPageButtons(inventory, actions, sales);
+            inventory.setItem(22, ctx.itemFactory().infoItem("<yellow>No sales</yellow>",
+                    List.of("<gray>No sale history was found.</gray>")));
+            new PaginationFooterTemplate(model.hasPrevious(), model.hasNext()).apply(inventory, actions, ctx);
             return;
         }
-        for (int i = 0; i < sales.items().size() && i < slots.length; i++) {
-            inventory.setItem(slots[i], itemFactory.saleHistoryItem(sales.items().get(i)));
+        for (int i = 0; i < sales.size() && i < slots.length; i++) {
+            inventory.setItem(slots[i], ctx.itemFactory().saleHistoryItem(sales.get(i)));
         }
-        addPageButtons(inventory, actions, sales);
+        new PaginationFooterTemplate(model.hasPrevious(), model.hasNext()).apply(inventory, actions, ctx);
     }
 
-    private void renderPriceHistory(Inventory inventory, Map<Integer, MenuAction> actions, MenuSession session) {
-        putBack(inventory, actions);
+    private void renderPriceHistory(Inventory inventory, Map<Integer, MenuAction> actions, PageModel.PriceHistory model) {
+        BorderTemplate.WITH_BACK.apply(inventory, actions, ctx);
 
-        List<YearMonth> months = dataFacade.getPriceHistoryMonths(session.selectedMarketKey());
-        if (months.isEmpty()) {
-            inventory.setItem(22, itemFactory.infoItem("<yellow>No price history</yellow>", List.of("<gray>No recommendation-history months were found for this item.</gray>")));
+        if (model.selectedMonth() == null || model.totalMonths() <= 0) {
+            inventory.setItem(22, ctx.itemFactory().infoItem("<yellow>No price history</yellow>",
+                    List.of("<gray>No recommendation-history months were found for this item.</gray>")));
             return;
         }
 
-        YearMonth month = resolvePriceHistoryMonth(session, months);
-        int monthIndex = months.indexOf(month);
-        inventory.setItem(visuals.slot("history.month", MenuSlots.PRICE_HISTORY_MONTH_CONTEXT), itemFactory.monthContextItem(month, monthIndex, months.size()));
-        addPriceHistoryMonthButtons(inventory, actions, monthIndex, months.size());
+        inventory.setItem(visuals.slot("history.month", MenuSlots.PRICE_HISTORY_MONTH_CONTEXT),
+                ctx.itemFactory().monthContextItem(model.selectedMonth(), model.monthIndex(), model.totalMonths()));
+        addPriceHistoryMonthButtons(inventory, actions, model.monthIndex(), model.totalMonths());
 
         int[] slots = visuals.slotList("history.entries", MenuSlots.HISTORY_SLOTS);
-        MenuPage<RecommendationHistoryPoint> points = dataFacade.getPriceHistoryPage(session.selectedMarketKey(), month, session.page(), slots.length);
+        List<RecommendationHistoryPoint> points = model.points();
         if (points.isEmpty()) {
-            inventory.setItem(22, itemFactory.infoItem("<yellow>No price points</yellow>", List.of("<gray>This month no longer has recommendation-history entries.</gray>")));
-            addPageButtons(inventory, actions, points);
+            inventory.setItem(22, ctx.itemFactory().infoItem("<yellow>No price points</yellow>",
+                    List.of("<gray>This month no longer has recommendation-history entries.</gray>")));
+            new PaginationFooterTemplate(model.hasPrevious(), model.hasNext()).apply(inventory, actions, ctx);
             return;
         }
-        for (int i = 0; i < points.items().size() && i < slots.length; i++) {
-            inventory.setItem(slots[i], itemFactory.priceHistoryItem(points.items().get(i)));
+        for (int i = 0; i < points.size() && i < slots.length; i++) {
+            inventory.setItem(slots[i], ctx.itemFactory().priceHistoryItem(points.get(i)));
         }
-        addPageButtons(inventory, actions, points);
+        new PaginationFooterTemplate(model.hasPrevious(), model.hasNext()).apply(inventory, actions, ctx);
     }
 
-    private YearMonth resolvePriceHistoryMonth(MenuSession session, List<YearMonth> months) {
-        YearMonth selected = session.selectedPriceHistoryMonth();
-        if (selected != null && months.contains(selected)) {
-            return selected;
-        }
-        return months.get(0);
-    }
-
-    private void addPriceHistoryMonthButtons(Inventory inventory, Map<Integer, MenuAction> actions, int monthIndex, int monthCount) {
+    private void addPriceHistoryMonthButtons(Inventory inventory, Map<Integer, MenuAction> actions,
+                                              int monthIndex, int monthCount) {
         if (monthIndex + 1 < monthCount) {
-            put(inventory, actions, visuals.slot("history.previousMonth", MenuSlots.PRICE_HISTORY_PREVIOUS_MONTH), itemFactory.previousMonthButton(), MenuAction.simple(MenuActionType.PREVIOUS_PRICE_HISTORY_MONTH));
+            put(inventory, actions, visuals.slot("history.previousMonth", MenuSlots.PRICE_HISTORY_PREVIOUS_MONTH),
+                    ctx.staticCache().previousMonth(), MenuAction.simple(MenuActionType.PREVIOUS_PRICE_HISTORY_MONTH));
         }
         if (monthIndex > 0) {
-            put(inventory, actions, visuals.slot("history.nextMonth", MenuSlots.PRICE_HISTORY_NEXT_MONTH), itemFactory.nextMonthButton(), MenuAction.simple(MenuActionType.NEXT_PRICE_HISTORY_MONTH));
+            put(inventory, actions, visuals.slot("history.nextMonth", MenuSlots.PRICE_HISTORY_NEXT_MONTH),
+                    ctx.staticCache().nextMonth(), MenuAction.simple(MenuActionType.NEXT_PRICE_HISTORY_MONTH));
         }
     }
 
-    private void addPageButtons(Inventory inventory, Map<Integer, MenuAction> actions, MenuPage<?> page) {
-        if (page.hasPrevious()) {
-            put(inventory, actions, visuals.slot("nav.previous", MenuSlots.PREVIOUS_PAGE), itemFactory.previousPageButton(), MenuAction.simple(MenuActionType.PREVIOUS_PAGE));
-        }
-        if (page.hasNext()) {
-            put(inventory, actions, visuals.slot("nav.next", MenuSlots.NEXT_PAGE), itemFactory.nextPageButton(), MenuAction.simple(MenuActionType.NEXT_PAGE));
-        }
-    }
-
-    private void putBack(Inventory inventory, Map<Integer, MenuAction> actions) {
-        put(inventory, actions, visuals.slot("nav.back", MenuSlots.BACK), itemFactory.backButton(), MenuAction.simple(MenuActionType.BACK));
-    }
-
-    private boolean mayAdminCancel(Player player) {
-        return player.hasPermission(ADMIN_PERMISSION) || player.hasPermission(ADMIN_CANCEL_PERMISSION);
-    }
-
-    private void put(Inventory inventory, Map<Integer, MenuAction> actions, int slot, org.bukkit.inventory.ItemStack item, MenuAction action) {
+    private void put(Inventory inventory, Map<Integer, MenuAction> actions, int slot, ItemStack item, MenuAction action) {
         if (slot < 0 || slot >= inventory.getSize()) {
             return;
         }
@@ -340,40 +399,79 @@ public final class MenuRenderer {
         }
     }
 
-    private void fill(Inventory inventory) {
-        var filler = itemFactory.fillerBlack();
-        for (int i = 0; i < inventory.getSize(); i++) {
-            inventory.setItem(i, filler);
-        }
+    private String title(MenuSession session) {
+        String fallback = dynamicTitle(session);
+        String configured = visuals.title(session.currentView(), fallback);
+        return resolveTitleTemplate(configured, fallback, session);
     }
 
-    private String title(MenuSession session) {
-        return visuals.title(session.currentView(), switch (session.currentView()) {
-            case MAIN -> "Market";
-            case CATEGORY_BROWSER -> "Market Category";
-            case SEARCH_RESULTS -> "Market Search";
-            case LISTING_BROWSER -> "Market Listings";
-            case ITEM_DETAIL -> "Market Item";
+    private String dynamicTitle(MenuSession session) {
+        return switch (session.currentView()) {
+            case MAIN -> "Divine Market";
+            case CATEGORY_BROWSER -> categoryBrowserTitle(session);
+            case SEARCH_RESULTS -> session.searchQuery() == null || session.searchQuery().isBlank()
+                    ? "Market Search"
+                    : "Search: " + session.searchQuery().trim();
+            case LISTING_BROWSER -> listingBrowserTitle(session);
+            case ITEM_DETAIL -> itemDetailTitle(session);
             case MY_LISTINGS -> "My Listings";
             case CLAIMS -> "Market Claims";
             case CLAIM_DETAIL -> "Claim Detail";
-            case SALE_HISTORY -> "Sale History";
-            case PRICE_HISTORY -> "Price History";
-        });
+            case SALE_HISTORY -> marketDisplayName(session) + " Sale History";
+            case PRICE_HISTORY -> marketDisplayName(session) + " Price History";
+        };
     }
 
-    private String contextKey(MenuSession session) {
-        return session.currentView().name().toLowerCase(java.util.Locale.ROOT)
-                + ":page=" + session.page()
-                + ":category=" + nullToEmpty(session.selectedCategoryId())
-                + ":enchant=" + nullToEmpty(session.selectedEnchantGroup())
-                + ":market=" + nullToEmpty(session.selectedMarketKey())
-                + ":listing=" + (session.selectedListingId() == null ? "" : session.selectedListingId())
-                + ":claim=" + (session.selectedClaimId() == null ? "" : session.selectedClaimId())
-                + ":priceMonth=" + (session.selectedPriceHistoryMonth() == null ? "" : session.selectedPriceHistoryMonth());
+    private String categoryBrowserTitle(MenuSession session) {
+        if ("enchanted_books".equalsIgnoreCase(session.selectedCategoryId())
+                && session.selectedEnchantGroup() != null
+                && !session.selectedEnchantGroup().isBlank()) {
+            return divinejason.divinemarketplace.auction.model.EnchantBrowseGroup
+                    .fromCommandToken(session.selectedEnchantGroup()).displayName() + " Enchants";
+        }
+        return dataFacade.getCategoryDisplayName(session.selectedCategoryId());
     }
 
-    private String nullToEmpty(String value) {
-        return value == null ? "" : value;
+    private String listingBrowserTitle(MenuSession session) {
+        if (session.selectedMarketKey() == null || session.selectedMarketKey().isBlank()) {
+            return "All Listings";
+        }
+        return marketDisplayName(session) + " Listings";
+    }
+
+    private String itemDetailTitle(MenuSession session) {
+        Listing listing = dataFacade.getListingById(session.selectedListingId());
+        if (listing != null) {
+            return listing.marketDisplayName();
+        }
+        return marketDisplayName(session);
+    }
+
+    private String marketDisplayName(MenuSession session) {
+        return dataFacade.getMarketDisplayName(session.selectedMarketKey());
+    }
+
+    private String resolveTitleTemplate(String configured, String fallback, MenuSession session) {
+        if (configured == null || configured.isBlank() || isLegacyGenericTitle(session.currentView(), configured)) {
+            return fallback;
+        }
+        String title = configured
+                .replace("{category}", categoryBrowserTitle(session))
+                .replace("{market_group}", marketDisplayName(session))
+                .replace("{query}", session.searchQuery() == null ? "" : session.searchQuery().trim());
+        return title.isBlank() ? fallback : title;
+    }
+
+    private boolean isLegacyGenericTitle(MenuView view, String title) {
+        String normalized = title.trim();
+        return switch (view) {
+            case CATEGORY_BROWSER -> normalized.equalsIgnoreCase("Market Category");
+            case SEARCH_RESULTS -> normalized.equalsIgnoreCase("Market Search");
+            case LISTING_BROWSER -> normalized.equalsIgnoreCase("Market Listings");
+            case ITEM_DETAIL -> normalized.equalsIgnoreCase("Market Item");
+            case SALE_HISTORY -> normalized.equalsIgnoreCase("Sale History");
+            case PRICE_HISTORY -> normalized.equalsIgnoreCase("Price History");
+            default -> false;
+        };
     }
 }

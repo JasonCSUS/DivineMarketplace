@@ -4,15 +4,15 @@
 
 titles:
   main: "Divine Market"
-  category_browser: "Market Category"
-  search_results: "Market Search"
-  listing_browser: "Market Listings"
+  category_browser: "{category}"
+  search_results: "Search: {query}"
+  listing_browser: "{market_group} Listings"
   item_detail: "Market Item"
   my_listings: "My Listings"
   claims: "Market Claims"
   claim_detail: "Claim Detail"
-  sale_history: "Sale History"
-  price_history: "Price History"
+  sale_history: "{market_group} Sale History"
+  price_history: "{market_group} Price History"
 
 slots:
   nav:
@@ -32,6 +32,7 @@ slots:
     groups: [11, 12, 13, 14, 15, 20, 21, 22, 23, 24, 29, 30, 31, 32, 33]
   listing:
     sort: 8
+    capacity: 4
     listings: [11, 12, 13, 14, 15, 20, 21, 22, 23, 24, 29, 30, 31, 32, 33, 38, 39, 40, 41, 42]
   detail:
     decrease: 21
@@ -61,6 +62,9 @@ items:
   fillerPurple:
     material: PURPLE_STAINED_GLASS_PANE
     name: " "
+  listingCapacity:
+    material: PAPER
+    name: "<gold>Listing Slots</gold>"
   back:
     material: ARROW
     name: "<yellow>Back</yellow>"
@@ -94,7 +98,44 @@ items:
   marketGroup:
     material: CHEST
   enchantTarget:
-    material: ENCHANTED_BOOK
+    sword:
+      material: DIAMOND_SWORD
+    axe:
+      material: DIAMOND_AXE
+    bow:
+      material: BOW
+    crossbow:
+      material: CROSSBOW
+    trident:
+      material: TRIDENT
+    armor:
+      material: DIAMOND_CHESTPLATE
+    helmet:
+      material: DIAMOND_HELMET
+    chestplate:
+      material: DIAMOND_CHESTPLATE
+    leggings:
+      material: DIAMOND_LEGGINGS
+    boots:
+      material: DIAMOND_BOOTS
+    tools:
+      material: DIAMOND_PICKAXE
+    pickaxe:
+      material: DIAMOND_PICKAXE
+    shovel:
+      material: DIAMOND_SHOVEL
+    hoe:
+      material: DIAMOND_HOE
+    elytra:
+      material: ELYTRA
+    shield:
+      material: SHIELD
+    shears:
+      material: SHEARS
+    universal:
+      material: ENCHANTED_BOOK
+    unknown:
+      material: BOOK
   listingUnavailable:
     material: BARRIER
     name: "<red>Listing unavailable</red>"

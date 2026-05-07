@@ -1,5 +1,5 @@
 # Default membership list for the weapons category.
-# Copied to plugins/DivineMarketplace/categories/ on first install; server edits are preserved on reload.
+# Internal seed data converted into plugins/DivineMarketplace/categories.csv; this file is not copied directly.
 categoryId: weapons
 items:
   - WOODEN_SWORD
@@ -19,3 +19,15 @@ items:
   - EGG
   - FIREWORK_ROCKET
   - FIREWORK_STAR
+
+  # Paper 1.21.11 material coverage additions.
+  - COPPER_SPEAR
+  - COPPER_SWORD
+  - DIAMOND_SPEAR
+  - FIRE_CHARGE
+  - GOLDEN_SPEAR
+  - IRON_SPEAR
+  - NETHERITE_SPEAR
+  - STONE_SPEAR
+  - WIND_CHARGE
+  - WOODEN_SPEAR

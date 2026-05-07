@@ -4,10 +4,6 @@ package divinejason.divinemarketplace.menu;
 /*
  * File role: Loads and validates menu.yml slots, titles, icons, and duplicate-slot rules.
  */
-import org.bukkit.Material;
-import org.bukkit.configuration.ConfigurationSection;
-import org.bukkit.configuration.file.YamlConfiguration;
-
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -18,6 +14,9 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.logging.Logger;
+import org.bukkit.Material;
+import org.bukkit.configuration.ConfigurationSection;
+import org.bukkit.configuration.file.YamlConfiguration;
 
 /**
  * Loads editable menu visuals and slot maps from plugins/DivineMarketplace/menu.yml.

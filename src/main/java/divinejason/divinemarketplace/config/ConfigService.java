@@ -5,7 +5,6 @@ package divinejason.divinemarketplace.config;
  * File role: Provides cached access to parsed plugin configuration values used across listing policy, storage, and cleanup code.
  */
 import divinejason.divinemarketplace.auction.model.SortMode;
-
 import java.util.List;
 
 public final class ConfigService {
@@ -21,15 +20,9 @@ public final class ConfigService {
     public long listingDefaultDurationMillis() { return getMainConfig().listingPolicies().defaults().listingDurationDays() * 86_400_000L; }
     public int listingDefaultMaxActiveListings() { return getMainConfig().listingPolicies().defaults().maxListings(); }
     public long itemClaimAbandonMillis() { return getMainConfig().storage().cleanup().abandonedItemClaimDays() * 86_400_000L; }
-    public int salesHistoryMaxMb() { return getMainConfig().storage().limits().salesHistoryMaxMb(); }
-    public int adminSalesHistoryMaxMb() { return getMainConfig().storage().limits().adminSalesHistoryMaxMb(); }
-    public int adminListingsHistoryMaxMb() { return getMainConfig().storage().limits().adminListingsHistoryMaxMb(); }
-    public int adminClaimsHistoryMaxMb() { return getMainConfig().storage().limits().adminClaimsHistoryMaxMb(); }
+    public int marketEventRetentionDays() { return getMainConfig().storage().cleanup().marketEventRetentionDays(); }
+    public long marketEventRetentionMillis() { return (long) marketEventRetentionDays() * 86_400_000L; }
     public int itemClaimsSoftMaxMb() { return getMainConfig().storage().limits().itemClaimsSoftMaxMb(); }
-    public long salesHistoryMaxBytes() { return mbToBytes(salesHistoryMaxMb()); }
-    public long adminSalesHistoryMaxBytes() { return mbToBytes(adminSalesHistoryMaxMb()); }
-    public long adminListingsHistoryMaxBytes() { return mbToBytes(adminListingsHistoryMaxMb()); }
-    public long adminClaimsHistoryMaxBytes() { return mbToBytes(adminClaimsHistoryMaxMb()); }
     public long itemClaimsSoftMaxBytes() { return mbToBytes(itemClaimsSoftMaxMb()); }
     public int itemClaimMaxActiveClaims() { return getMainConfig().claims().maxActiveItemClaims(); }
     public long marketRecalcIntervalMillis() { return getMainConfig().market().recalcIntervalHours() * 3_600_000L; }
@@ -57,6 +50,7 @@ public final class ConfigService {
     public boolean writeUnknownDefinitionsImmediately() { return getMainConfig().admin().writeUnknownDefinitionsImmediately(); }
     public boolean allowInGameDefinitionCommands() { return getMainConfig().admin().allowInGameDefinitionCommands(); }
     public boolean regeneratePermissionsFileOnReload() { return getMainConfig().admin().regeneratePermissionsFileOnReload(); }
+    public boolean performanceTimings() { return getMainConfig().debug().performanceTimings(); }
     public boolean unknownCustomModelDataEnabled() { return getMainConfig().customItemIdentity().unknownCustomModelData().enabled(); }
     public boolean autoCreateUnknownCustomModelDefinitions() { return getMainConfig().customItemIdentity().unknownCustomModelData().autoCreateDefinition(); }
     public String unknownCustomModelCategory() { return getMainConfig().customItemIdentity().unknownCustomModelData().category(); }

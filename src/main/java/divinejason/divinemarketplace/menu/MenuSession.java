@@ -5,7 +5,6 @@ package divinejason.divinemarketplace.menu;
  * File role: Represents one player's current GUI view, filters, selected ids, pagination, and back-stack state.
  */
 import divinejason.divinemarketplace.auction.model.SortMode;
-
 import java.time.YearMonth;
 import java.util.ArrayList;
 import java.util.List;

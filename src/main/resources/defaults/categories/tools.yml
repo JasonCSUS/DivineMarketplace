@@ -1,5 +1,5 @@
 # Default membership list for the tools category.
-# Copied to plugins/DivineMarketplace/categories/ on first install; server edits are preserved on reload.
+# Internal seed data converted into plugins/DivineMarketplace/categories.csv; this file is not copied directly.
 categoryId: tools
 items:
   - WOODEN_PICKAXE
@@ -34,3 +34,9 @@ items:
   - CLOCK
   - COMPASS
   - RECOVERY_COMPASS
+
+  # Paper 1.21.11 material coverage additions.
+  - COPPER_AXE
+  - COPPER_HOE
+  - COPPER_PICKAXE
+  - COPPER_SHOVEL

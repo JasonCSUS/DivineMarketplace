@@ -1,5 +1,5 @@
 # Default membership list for the farming category.
-# Copied to plugins/DivineMarketplace/categories/ on first install; server edits are preserved on reload.
+# Internal seed data converted into plugins/DivineMarketplace/categories.csv; this file is not copied directly.
 categoryId: farming
 items:
   - WHEAT
@@ -64,3 +64,24 @@ items:
   - LILY_PAD
   - BROWN_MUSHROOM
   - RED_MUSHROOM
+
+  # Paper 1.21.11 material coverage additions.
+  - BLUE_EGG
+  - BROWN_EGG
+  - BIG_DRIPLEAF
+  - BUSH
+  - CACTUS_FLOWER
+  - DEAD_BUSH
+  - FIREFLY_BUSH
+  - FROGSPAWN
+  - LEAF_LITTER
+  - NETHER_SPROUTS
+  - PALE_HANGING_MOSS
+  - POINTED_DRIPSTONE
+  - SEA_PICKLE
+  - SHORT_DRY_GRASS
+  - SMALL_DRIPLEAF
+  - SNIFFER_EGG
+  - TALL_DRY_GRASS
+  - TALL_GRASS
+  - TURTLE_EGG

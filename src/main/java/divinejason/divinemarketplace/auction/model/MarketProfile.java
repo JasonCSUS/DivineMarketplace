@@ -1,5 +1,5 @@
 package divinejason.divinemarketplace.auction.model;
-
+import divinejason.divinemarketplace.auction.service.pricing.MarketProfileCalculator;
 
 /*
  * File role: Carries immutable market profile data between marketplace services, persistence stores, commands, and GUI rendering.

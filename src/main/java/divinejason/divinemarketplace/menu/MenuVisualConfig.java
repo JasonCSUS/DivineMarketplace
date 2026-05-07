@@ -4,12 +4,11 @@ package divinejason.divinemarketplace.menu;
 /*
  * File role: Holds validated GUI titles, slots, slot lists, and icon overrides loaded from menu.yml.
  */
-import org.bukkit.Material;
-
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import org.bukkit.Material;
 
 /**
  * Runtime menu visuals/layout map loaded from menu.yml.

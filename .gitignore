@@ -13,3 +13,6 @@ src/main/java/divinejason/divinemarketplace/auction/ui/
 src/main/java/divinejason/divinemarketplace/listener/AuctionInventoryListener.java
 src/main/java/divinejason/divinemarketplace/command/AuctionCommand.java
 src/main/java/divinejason/divinemarketplace/command/AuctionAdminCommand.java
+
+# Refactor quarantine: source snapshots kept for reference only.
+/quarantine/

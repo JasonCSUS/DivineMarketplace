@@ -5,14 +5,13 @@ package divinejason.divinemarketplace.config;
  * File role: Loads main config values from YAML and applies defaults/clamps before services read them.
  */
 import divinejason.divinemarketplace.auction.model.SortMode;
-import org.bukkit.configuration.file.FileConfiguration;
-import org.bukkit.configuration.file.YamlConfiguration;
-import org.bukkit.plugin.java.JavaPlugin;
-
 import java.io.File;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import org.bukkit.configuration.file.FileConfiguration;
+import org.bukkit.configuration.file.YamlConfiguration;
+import org.bukkit.plugin.java.JavaPlugin;
 
 public final class MainConfigLoader {
     public MainConfig load(JavaPlugin plugin) {
@@ -29,13 +28,12 @@ public final class MainConfigLoader {
                         config.getString("storage.database.modulePrefix", "market")
                 ),
                 new MainConfig.Limits(
-                        positiveInt(config, "storage.limits.salesHistoryMaxMb", 50),
-                        positiveInt(config, "storage.limits.adminSalesHistoryMaxMb", 25),
-                        positiveInt(config, "storage.limits.adminListingsHistoryMaxMb", 25),
-                        positiveInt(config, "storage.limits.adminClaimsHistoryMaxMb", 25),
                         positiveInt(config, "storage.limits.itemClaimsSoftMaxMb", 100)
                 ),
-                new MainConfig.Cleanup(positiveInt(config, "storage.cleanup.abandonedItemClaimDays", 30))
+                new MainConfig.Cleanup(
+                        positiveInt(config, "storage.cleanup.abandonedItemClaimDays", 30),
+                        nonnegativeInt(config, "storage.cleanup.marketEventRetentionDays", 90)
+                )
         );
 
         MainConfig.CustomItems customItems = new MainConfig.CustomItems(
@@ -125,7 +123,11 @@ public final class MainConfigLoader {
                 config.getBoolean("ui.interceptAllInventoryClicks", true)
         );
 
-        return new MainConfig(storage, customItems, customItemIdentity, listingPolicies, claims, packagesConfig, market, search, admin, ui);
+        MainConfig.Debug debug = new MainConfig.Debug(
+                config.getBoolean("debug.performanceTimings", false)
+        );
+
+        return new MainConfig(storage, customItems, customItemIdentity, listingPolicies, claims, packagesConfig, market, search, admin, ui, debug);
     }
 
     private List<MainConfig.Rule> readCustomIdentityRules(FileConfiguration config) {
@@ -193,6 +195,7 @@ public final class MainConfigLoader {
     }
 
     private int positiveInt(FileConfiguration config, String path, int fallback) { return Math.max(1, config.getInt(path, fallback)); }
+    private int nonnegativeInt(FileConfiguration config, String path, int fallback) { return Math.max(0, config.getInt(path, fallback)); }
     private int positiveInt(Object rawValue, int fallback) { return rawValue instanceof Number n ? Math.max(1, n.intValue()) : fallback; }
     private double nonNegativeDouble(FileConfiguration config, String path, double fallback) { return Math.max(0.0, config.getDouble(path, fallback)); }
 }

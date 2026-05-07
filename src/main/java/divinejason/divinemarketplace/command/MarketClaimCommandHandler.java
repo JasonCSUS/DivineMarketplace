@@ -5,11 +5,10 @@ package divinejason.divinemarketplace.command;
  * File role: Handles player-facing market claim command subcommands and translates service results into chat/GUI feedback.
  */
 import divinejason.divinemarketplace.auction.model.ClaimMoneyResult;
-import org.bukkit.command.CommandSender;
-import org.bukkit.entity.Player;
-
 import java.util.Collection;
 import java.util.List;
+import org.bukkit.command.CommandSender;
+import org.bukkit.entity.Player;
 
 final class MarketClaimCommandHandler implements MarketPlayerCommandHandler {
     private final MarketPlayerCommandContext context;

@@ -4,13 +4,12 @@ package divinejason.divinemarketplace.command;
 /*
  * File role: Handles the market storage admin command subcommand group and keeps its permission checks, parsing, and output in one file.
  */
-import divinejason.divinemarketplace.DivineMarketplace.SQLiteStorageMaintenanceResult;
+import divinejason.divinemarketplace.auction.service.storage.StorageMaintenanceService.StorageMaintenanceResult;
 import divinejason.divinemarketplace.config.ConfigService;
-import org.bukkit.command.CommandSender;
-
 import java.util.Collection;
 import java.util.List;
 import java.util.Locale;
+import org.bukkit.command.CommandSender;
 
 /**
  * Admin storage diagnostics and manual SQLite cleanup entry point.
@@ -60,25 +59,33 @@ final class MarketStorageAdminCommand implements MarketAdminCommandHandler {
 
     private void showStorage(CommandSender sender) {
         sender.sendRichMessage("<gold>DivineMarketplace Storage</gold>");
-        sender.sendRichMessage("<gray>SQLite files:</gray> <white>" + formatBytes(context.plugin.getSQLiteStorageBytes()) + "</white>");
-        sender.sendRichMessage(row("Sale history", context.plugin.getSalesHistoryPayloadBytes(), ConfigService.get().salesHistoryMaxBytes()));
-        sender.sendRichMessage(row("Admin sales", context.plugin.getAdminSalesHistoryPayloadBytes(), ConfigService.get().adminSalesHistoryMaxBytes()));
-        sender.sendRichMessage(row("Admin listings", context.plugin.getAdminListingsHistoryPayloadBytes(), ConfigService.get().adminListingsHistoryMaxBytes()));
-        sender.sendRichMessage(row("Admin claims", context.plugin.getAdminClaimsHistoryPayloadBytes(), ConfigService.get().adminClaimsHistoryMaxBytes()));
-        sender.sendRichMessage(row("Item claims", context.plugin.getItemClaimPayloadBytes(), ConfigService.get().itemClaimsSoftMaxBytes()));
+        sender.sendRichMessage("<gray>SQLite files:</gray> <white>" + formatBytes(context.plugin.getRuntime().getStorageMaintenanceService().sqliteStorageBytes()) + "</white>");
+        int retentionDays = ConfigService.get().marketEventRetentionDays();
+        String retentionNote = retentionDays > 0 ? retentionDays + "d retention" : "no age limit";
+        sender.sendRichMessage("<gray>Market events:</gray> <white>" + formatBytes(context.plugin.getRuntime().getStorageMaintenanceService().marketEventPayloadBytes()) + "</white> <dark_gray>(" + retentionNote + ")</dark_gray>");
+        sender.sendRichMessage(row("Item claims", context.plugin.getRuntime().getStorageMaintenanceService().itemClaimPayloadBytes(), ConfigService.get().itemClaimsSoftMaxBytes()));
         sender.sendRichMessage("<dark_gray>Run /market storage cleanup to apply retention cleanup now.</dark_gray>");
     }
 
     private void runCleanup(CommandSender sender) {
-        SQLiteStorageMaintenanceResult result = context.plugin.runSQLiteStorageMaintenance();
-        sender.sendRichMessage("<green>SQLite storage maintenance complete.</green>");
-        sender.sendRichMessage("<gray>Storage:</gray> <white>" + formatBytes(result.beforeBytes()) + " -> " + formatBytes(result.afterBytes()) + "</white>");
-        sender.sendRichMessage("<gray>Removed:</gray> <white>" + result.totalPurged() + " record(s)</white> "
-                + "<dark_gray>(sales=" + result.purgedSales()
-                + ", admin_sales=" + result.purgedAdminSales()
-                + ", admin_listings=" + result.purgedAdminListings()
-                + ", admin_claims=" + result.purgedAdminClaims()
-                + ", abandoned_item_claims=" + result.purgedItemClaims() + ")</dark_gray>");
+        sender.sendRichMessage("<yellow>SQLite storage maintenance queued async. Normal write flushing is paused during cleanup.</yellow>");
+        context.plugin.getServer().getScheduler().runTaskAsynchronously(context.plugin, () -> {
+            try {
+                StorageMaintenanceResult result = context.plugin.getRuntime().getStorageMaintenanceService().runRetentionPass();
+                context.plugin.getServer().getScheduler().runTask(context.plugin, () -> {
+                    sender.sendRichMessage("<green>SQLite storage maintenance complete.</green>");
+                    sender.sendRichMessage("<gray>Storage:</gray> <white>" + formatBytes(result.beforeBytes()) + " -> " + formatBytes(result.afterBytes()) + "</white>");
+                    sender.sendRichMessage("<gray>Removed:</gray> <white>" + result.totalPurged() + " record(s)</white> "
+                            + "<dark_gray>(events=" + result.purgedEvents()
+                            + ", abandoned_item_claims=" + result.purgedItemClaims() + ")</dark_gray>");
+                });
+            } catch (Exception exception) {
+                context.plugin.getServer().getScheduler().runTask(context.plugin, () ->
+                        sender.sendRichMessage("<red>SQLite storage maintenance failed:</red> <gray>"
+                                + context.escapeMini(exception.getMessage() == null ? exception.getClass().getSimpleName() : exception.getMessage())
+                                + "</gray>"));
+            }
+        });
     }
 
     private String row(String label, long usedBytes, long maxBytes) {

@@ -7,14 +7,13 @@ package divinejason.divinemarketplace.command;
 import divinejason.divinemarketplace.auction.model.CustomItemDefinition;
 import divinejason.divinemarketplace.auction.model.CustomItemDefinitionState;
 import divinejason.divinemarketplace.auction.model.CustomItemTypeExtractionResult;
-import org.bukkit.command.CommandSender;
-import org.bukkit.entity.Player;
-import org.bukkit.inventory.ItemStack;
-
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import java.util.Locale;
+import org.bukkit.command.CommandSender;
+import org.bukkit.entity.Player;
+import org.bukkit.inventory.ItemStack;
 
 final class MarketItemAdminCommand implements MarketAdminCommandHandler {
     private final MarketAdminCommandContext context;
@@ -82,7 +81,6 @@ final class MarketItemAdminCommand implements MarketAdminCommandHandler {
             sender.sendRichMessage("<red>That market entry could not be recategorized.</red>");
             return;
         }
-        context.plugin.reloadRuntimeData();
         sender.sendRichMessage("<green>Moved</green> <white>" + context.escapeMini(marketKey) + "</white> <green>to category</green> <white>" + context.escapeMini(categoryId) + "</white>");
     }
 
@@ -112,7 +110,6 @@ final class MarketItemAdminCommand implements MarketAdminCommandHandler {
                 CustomItemDefinitionState.CONFIRMED
         );
         context.customItemRegistry.upsertDefinition(updated);
-        context.plugin.reloadRuntimeData();
         sender.sendRichMessage("<green>Defined custom item</green> <white>" + context.escapeMini(updated.itemType()) + "</white> <green>as</green> <white>" + context.escapeMini(updated.marketDisplayName()) + "</white>");
     }
 

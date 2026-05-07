@@ -1,4 +1,3 @@
-// Builds the Paper plugin jar and declares compile/runtime dependencies.
 plugins {
     java
 }
@@ -24,8 +23,8 @@ dependencies {
     }
     implementation("org.xerial:sqlite-jdbc:3.45.3.0")
     implementation("com.zaxxer:HikariCP:5.1.0")
-    // Optional integration APIs such as ItemsAdder should be added as compileOnly
-    // dependencies only when their exact server-side artifact coordinates are known.
+    // TODO: add compileOnly dependencies for ItemsAdder / IceStorm when the exact
+    // API artifacts used by the server are confirmed.
 }
 
 java {
@@ -34,4 +33,22 @@ java {
 
 tasks.withType<JavaCompile>().configureEach {
     options.encoding = "UTF-8"
+}
+
+// Paper only provides the Paper API and plugin dependencies such as Vault.
+// SQLite JDBC and HikariCP are normal JVM libraries, so the plugin jar must
+// include them. Without this fat-jar step, the server can compile the plugin
+// but fail at startup with NoClassDefFoundError for HikariConfig or org.sqlite.JDBC.
+tasks.jar {
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+
+    from({
+        configurations.runtimeClasspath.get()
+            .filter { dependency -> dependency.name.endsWith(".jar") }
+            .map { dependency -> zipTree(dependency) }
+    })
+
+    // Maven artifacts can contain signature metadata that becomes invalid once
+    // their classes are unpacked into this plugin jar.
+    exclude("META-INF/*.SF", "META-INF/*.DSA", "META-INF/*.RSA")
 }

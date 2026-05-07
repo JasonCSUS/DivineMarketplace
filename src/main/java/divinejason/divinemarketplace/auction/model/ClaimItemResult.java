@@ -4,6 +4,7 @@ package divinejason.divinemarketplace.auction.model;
 /*
  * File role: Carries immutable claim item result data between marketplace services, persistence stores, commands, and GUI rendering.
  */
+import divinejason.divinemarketplace.auction.service.claim.ClaimService;
 import java.util.UUID;
 
 /**

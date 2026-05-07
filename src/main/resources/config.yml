@@ -10,15 +10,12 @@ storage:
     sqliteFile: "data/market.db"
     modulePrefix: "market"
   limits:
-    # History limits are enforced against each SQLite table's encoded payload size, not the shared DB file size.
-    salesHistoryMaxMb: 50
-    adminSalesHistoryMaxMb: 25
-    adminListingsHistoryMaxMb: 25
-    adminClaimsHistoryMaxMb: 25
-    # Item-claim cleanup only removes abandoned claims older than storage.cleanup.abandonedItemClaimDays.
+    # Abandoned item-claim cleanup triggers when total payload exceeds this soft limit AND the claim is older than abandonedItemClaimDays.
     itemClaimsSoftMaxMb: 100
   cleanup:
     abandonedItemClaimDays: 30
+    # Days to keep market events before purging. Set to 0 to disable time-based purging.
+    marketEventRetentionDays: 90
 
 customItems:
   autoDiscoverUnknownItems: true
@@ -94,6 +91,11 @@ ui:
   showEmptyTopLevelCategories: true
   showListingCountsInCategoryLore: true
   interceptAllInventoryClicks: true
+
+debug:
+  # Log timing data for menu renders, write flushes, storage load, maintenance, and price recalc.
+  # Format: [DivineMarketplace][perf] <category> <key>=<value>...
+  performanceTimings: false
 
 
 customItemIdentity:

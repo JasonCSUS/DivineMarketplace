@@ -1,5 +1,5 @@
 # Default membership list for the materials category.
-# Copied to plugins/DivineMarketplace/categories/ on first install; server edits are preserved on reload.
+# Internal seed data converted into plugins/DivineMarketplace/categories.csv; this file is not copied directly.
 categoryId: materials
 items:
   - STICK
@@ -35,3 +35,10 @@ items:
   - PURPLE_DYE
   - MAGENTA_DYE
   - PINK_DYE
+
+  # Paper 1.21.11 material coverage additions.
+  - BOWL
+  - BREEZE_ROD
+  - PRISMARINE_CRYSTALS
+  - PRISMARINE_SHARD
+  - RESIN_BRICK

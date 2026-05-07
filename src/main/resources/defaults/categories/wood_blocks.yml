@@ -1,5 +1,5 @@
 # Default membership list for the wood blocks category.
-# Copied to plugins/DivineMarketplace/categories/ on first install; server edits are preserved on reload.
+# Internal seed data converted into plugins/DivineMarketplace/categories.csv; this file is not copied directly.
 categoryId: wood_blocks
 items:
   - OAK_LOG
@@ -164,3 +164,9 @@ items:
   - BAMBOO_MOSAIC_STAIRS
   - BOOKSHELF
   - CHISELED_BOOKSHELF
+
+  # Paper 1.21.11 material coverage additions.
+  - AZALEA_LEAVES
+  - FLOWERING_AZALEA_LEAVES
+  - MANGROVE_ROOTS
+  - MUDDY_MANGROVE_ROOTS

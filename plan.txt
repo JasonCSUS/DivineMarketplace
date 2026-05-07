@@ -1,3 +1,9 @@
+## Alpha startup/install notes
+
+- The plugin jar is built as a fat jar that bundles SQLite JDBC and HikariCP.
+- Paper/Vault are still `compileOnly`/server-provided dependencies, but normal JVM libraries used by SQLite storage must be inside the plugin jar.
+- If startup reports `NoClassDefFoundError: com/zaxxer/hikari/HikariConfig` or `org/sqlite/JDBC`, rebuild with the current `build.gradle.kts` and deploy the newly generated jar from `build/libs`.
+
 DivineMarketplace plan
 ======================
 
@@ -8,198 +14,208 @@ Current implementation baseline (May 2026)
 - Legacy `.bin`, binary-cache, and owner-hash claim-file storage notes are obsolete.
 - Player GUI/chat state is intentionally sharded by player UUID in memory so many players can use the marketplace at the same time. This is UI/session sharding, not separate claim persistence files.
 - Item claims, money claims, active listings, sales history, admin audit history, market index, recommendations, price history, custom enchant metadata, custom item overrides, and small runtime state values all live in SQLite tables.
-- Text YAML files still matter as bootstrap/editable definition sources: `config.yml`, `category_config.yml`, `categories/*.yml`, `custom/custom_items.yml`, `custom/custom_enchants.yml`, and `menu.yml`.
+- Text config files still matter as bootstrap/editable definition sources: `config.yml`, `category_config.yml`, `categories.csv`, `custom/custom_items.yml`, `custom/custom_enchants.yml`, and `menu.yml`.
+- Bundled `defaults/categories/*.yml` files are internal seed data. Startup converts them into one live `categories.csv` file instead of copying a folder full of YAML files.
 
-1. Startup and setup
---------------------
-Purpose:
-- create missing plugin folders and defaults on first startup
-- preserve existing runtime database state
-- generate readable admin helper files such as `permissions.txt`
 
-Current behavior:
-- `PluginFileInitializer` creates the live folder layout and copies missing bundled defaults
-- `MainConfigLoader` parses `config.yml` into `MainConfig`
-- `ConfigService` exposes cached config helpers
-- `MenuVisualConfigLoader` loads and validates editable GUI layout/visuals from `menu.yml`
-- `/market reload` reloads runtime config/data and refreshes the menu renderer without registering duplicate listeners
 
-2. Runtime storage
-------------------
-Purpose:
-- keep active market state durable without custom binary file maintenance
+Current top priority: async-safe market runtime
+-------------------------------
 
-Current SQLite tables:
-- `listings`
-- `item_claims`
-- `money_claims`
-- `sales`
-- `admin_sales`
-- `admin_listings`
-- `admin_claims`
-- `market_index`
-- `market_prices`
-- `price_history`
-- `runtime_state`
-- `custom_enchants`
-- `custom_item_overrides`
+The next refactor priority is not another file move. The plugin must become safe under real multiplayer marketplace pressure. The target is:
 
-Rules:
-- active listings are not size-purged as cache data; they are live market state
-- SQLite storage tracking includes the main database file plus WAL/SHM sidecar files
-- history table retention uses per-table logical payload size so shared SQLite storage still honors the configured history MB limits
-- item claim cleanup uses the `item_claims` table payload size and abandoned claim age; it does not delete active/unexpired claims just because the total SQLite database is large
-- retention cleanup checkpoints/truncates WAL and runs VACUUM after rows are deleted so old data can actually release disk pages
-- `/market storage` shows current storage usage; `/market storage cleanup` runs the retention pass immediately
-- write flows that touch multiple stores should use rollback helpers where practical
+- Keep all Minecraft/Paper-facing work on the main server thread: inventory clicks, chest GUI rendering/opening, player inventory reads/writes, item delivery, messages, and Vault/economy calls unless proven safe.
+- Move plain plugin data work async where possible: SQL load/write, sorting/filtering snapshots, search preparation, analytics, price recalculation, and history/export work.
+- Load SQLite storage into memory during startup, then treat memory as runtime truth. Normal menu/command reads should not query SQL.
+- Keep WAL enabled, but still route all writes through one controlled SQLite write pipeline because SQLite has one writer.
+- Batch writes by market action. A purchase/cancel/claim/relist should enqueue one transaction-sized batch instead of letting several stores write separately.
+- Purge or quarantine old direct append/save/delete methods after queued equivalents are stable, so future code cannot accidentally bypass the writer queue.
+- Flush critical writes on a timer/threshold and during shutdown. Prefer roughly 30-60 seconds for normal batching, with sooner threshold flushes for purchases/claims. Five minutes is acceptable only for low-risk analytics, not economy-critical state.
+- Use immutable snapshots for async reading/planning. Async workers should calculate deltas, then the runtime should validate and apply those deltas to current authoritative memory. Do not mutate a copied snapshot and blindly replace current memory.
+- Add per-player and per-object action locks so spam clicks cannot create duplicate purchases, duplicate listing cancels, duplicate item claims, or duplicate money payouts.
+- Async as many menu preparation tasks as possible, but do not async the Bukkit inventory GUI itself. Expensive page/search preparation can happen from snapshots; final ItemStack rendering/opening stays sync.
+- Treat GUI performance as a top-level alpha hardening item: the current renderer rebuilds inventories/page data from raw Java methods on each open/page change, so the next GUI refactor needs templates, cached plain page models, data-version invalidation, and async page preparation for heavy screens.
+- Short-term future work: ~~merge admin history and player market/sale history into one canonical market event stream~~ (DONE — market_events canonical store implemented).
+- Cleanup direction: move back toward time-based retention/deletion instead of storage-size-based deletion to reduce repeated size calculations and make admin behavior easier to reason about.
+- Purge/delete/maintenance operations must be mutually exclusive with the normal write-behind worker: drain or pause normal queued writes first, run the maintenance transaction, then resume the writer.
+- Reload should become targeted and async: config/menu/prices can reload by command, but full SQL-backed runtime reload should not run synchronously on the server thread. Reload paths should keep WAL enabled and use the same storage worker/maintenance gate.
 
-3. Item identity and definitions
---------------------------------
-Purpose:
-- resolve a raw `ItemStack` into one market-facing identity and behavior set
+See `ASYNC_MARKET_RUNTIME_PLAN.md` for the detailed thread/storage/snapshot plan.
 
-Resolved identity contains:
-- `marketKey` for stable internal grouping
-- `marketDisplayName` for player-facing labels
-- `categoryId`
-- optional `itemType` for custom items
-- recommendation/history/training flags
-- browse visibility
-- review severity
-- enchant map when relevant
+Major architecture redo target
+------------------------------
+This is the next large refactor after the current alpha behavior is stable. The goal is not to throw away working marketplace behavior; the goal is to move the existing services, registries, stores, GUI code, command handlers, and helpers into a clearer architecture that is easier to read, extend, and optimize.
 
-Current custom-item direction:
-- known config/definition files can seed custom item behavior
-- runtime auto-discovered or admin-defined custom items write to SQLite-backed `market_index`
-- category display names/icons/order come from `category_config.yml`; raw category ids remain internal command/storage tokens
-- unknown/flagged custom item metadata should still be logged to readable files under `logs/` so server owners can inspect discoveries from the server computer
-- newly discovered custom items default to `unsorted`, require admin review, and are excluded from recommendation training until confirmed
+Guiding principles:
+- Rebuild the project layout around an explicit Registry / Service / Store framework.
+- Keep the main plugin class small. It should own Paper lifecycle handoff only: create the runtime, enable it, disable it, and expose only the minimal plugin-level accessors Paper needs.
+- Move startup wiring into module/bootstrap classes so `DivineMarketplace.java` is not a long list of construction and dependency glue.
+- Reduce duplicated player/admin data. Player views, admin logs, Discord webhooks, and analytics should be projections of the same canonical market data/events whenever possible.
+- Make runtime reads memory-first. Minecraft servers should spend RAM to avoid repeated CPU-heavy scans and repeated SQL IO during normal gameplay.
+- Make SQL durability/recovery/reporting, not the hot gameplay path.
+- Batch writes aggressively. Runtime mutations should update memory immediately, enqueue a persistence operation, and flush/coalesce writes in the background or at shutdown.
+- Avoid frequent destructive storage cleanup during normal server runtime. Deletion/compaction should happen at startup and through explicit admin commands, not on a short recurring schedule.
+- Destructive cleanup and reload maintenance must coordinate with the write-behind worker so normal writes and purge/delete transactions never run against SQLite at the same time.
+- Document dependencies between files/modules so a new maintainer can follow which layer owns what.
 
-4. Listing flow
----------------
-Purpose:
-- let players sell a quantity from the item currently held in main hand
+Target module layout:
+- `bootstrap` / `runtime`: plugin lifecycle, module creation, dependency wiring, enable/disable ordering.
+- `storage`: SQL connection management, schema migrations, write-behind queue, storage backend abstractions, SQLite/MySQL implementations.
+- `store`: memory-first stores and indexes. Stores load SQL rows at startup, treat memory as runtime truth, and enqueue persistence writes.
+- `registry`: definition/lookup data such as categories, item identities, custom items, custom enchants, permissions, menu definitions, and market key metadata.
+- `service`: business behavior such as listing, buying, claiming, relisting, recommendations, history, storage maintenance, admin review, and event publication.
+- `event` or `market_event`: canonical marketplace events. Admin history, player history, Discord webhooks, and audit exports should be generated from these events instead of separate duplicated data paths.
+- `gui`: a strict inventory GUI framework plus marketplace screens. Avoid freehand menu construction in individual render methods.
+- `command`: command entry points that delegate to services/GUI/prompt flows and do not contain business logic.
+- `prompt`: chat input sessions for search/list/relist/price entry.
+- `scheduler`: named scheduled tasks and startup/shutdown flush hooks.
+- `util`: shared MiniMessage/message formatting, money formatting, time formatting, item formatting, pagination helpers, permission helpers, scheduler helpers, config validation, and small collection/index helpers.
 
-Current behavior:
-- `/market list` or the GUI list button closes the menu and prompts in chat for `quantity unitPrice`
-- chat prompt quantity tokens are exact integers, `stack`, and `all`
-- `/market list <quantity> <unitPrice>` remains available as a direct command path with exact numeric quantity scope
-- the server re-reads the live main-hand item before listing
-- the requested amount clamps to the live main-hand stack, not matching stacks elsewhere in inventory
-- the item is removed and verified before the listing is created or merged
-- listing result objects report structured success/failure to commands and GUI prompts
+Registry / Service / Store responsibilities:
+- Registries answer definition questions: what category exists, what item identity means, what custom enchant is known, what GUI material/icon should be used.
+- Services perform marketplace behavior and enforce rules. Services may use registries and stores, but should not know SQL details.
+- Stores own cached mutable state and persistence queues. Stores expose indexed reads and mutation methods; they should not contain player-facing messages or GUI behavior.
+- Commands, GUI, and chat prompts are adapters. They gather player input, call services, and render service results.
 
-5. Purchase flow
-----------------
-Purpose:
-- safely transfer money to seller claims and purchased items to buyer claims
+Memory-first storage target:
+- On enable/reload, stores load all required active rows into memory.
+- Runtime reads use in-memory maps/indexes only.
+- Runtime writes update memory synchronously, then enqueue write-behind SQL operations.
+- The write-behind queue coalesces repeated updates to the same logical record where safe.
+- The queue flushes on a timer, on operation thresholds, before reload/maintenance, and during plugin disable.
+- Shutdown flush must block long enough to make pending writes durable or log a clear failure.
+- SQL reads during gameplay should be exceptions, not the default pattern.
+- Listing stores should maintain indexes such as by id, seller, category, market key, and searchable display tokens.
+- Claim stores should maintain indexes by owner and claim id.
+- History stores should maintain recent in-memory indexes for GUI/command reads and write older durable rows to SQL.
 
-Current behavior:
-- buyers cannot buy their own listings
-- normal buyers see quantity controls and confirm purchase in item detail
-- owners see inspect/cancel controls, not buy controls
-- admins viewing someone else's listing see buyer controls plus admin cancel
-- purchases require either a mergeable buyer claim or an open claim slot before money is withdrawn
-- purchased items are routed to buyer item claims, not direct inventory delivery
-- seller proceeds accumulate in money claims and are paid through Vault when claimed
+Storage cleanup target:
+- Current code has scheduled SQLite retention cleanup. That is acceptable for the current alpha implementation, but it conflicts with the long-term target.
+- Refactor target: destructive cleanup/compaction should run on startup and through `/market storage cleanup`; it should not run frequently while players are using the market.
+- Runtime storage pressure can still be monitored periodically, but monitoring should not delete rows or VACUUM while the server is active unless an admin explicitly requests it.
+- Purge/delete/compaction must be mutually exclusive with normal queued writes. The maintenance path should stop accepting new write batches, flush or checkpoint pending batches, run the maintenance transaction, then reopen normal queued writes.
+- Reload/maintenance commands should keep SQLite WAL enabled and should not silently fall back to a blocking main-thread SQL path.
+- SQLite and MySQL backends should share the same store/service contract. Backend-specific cleanup should live under storage backend implementations.
 
-6. Claim flow
--------------
-Purpose:
-- safely hold owed items/money until the player is ready to claim or relist
+Canonical market event direction:
+- Create one event model for marketplace changes: listing created, listing merged, listing cancelled, item purchased, item claim created, item claim redeemed, claim relisted, money claim created, money paid, recommendation changed, admin override applied, custom item flagged, etc.
+- Player sale history, admin audit history, analytics, Discord webhooks, and export tools should read from this shared event stream.
+- Keep separate projections/tables only when they serve a clear performance or retention purpose.
+- Admin history should not duplicate sale history as a second unrelated write path when both describe the same purchase.
+- Discord webhooks should subscribe to event projections rather than being called manually from many unrelated services.
 
-Current behavior:
-- item claims and money claims are separate SQLite tables
-- item claims merge similar items for the same owner when possible
-- claim detail supports:
-  - claim one safe stack-sized chunk
-  - claim as much as safely fits in storage inventory contents
-  - relist through chat input for `quantity unitPrice`
-- claim actions return structured result objects so GUI/commands can show exact claimed amounts and remaining claim amount
-- money claims pay accumulated seller earnings through Vault and return exact payout results
-- relist-from-claim creates/merges a listing from the stored claim snapshot and decrements the claim only after successful listing persistence
+Public-server expansion goals:
+- Optional MySQL backend for larger public servers.
+- Config-driven storage backend: `sqlite` by default, `mysql` optional later.
+- HikariCP is already used for SQLite and should remain for MySQL.
+- Services, commands, and GUI should not care which backend is active.
+- Optional Discord webhooks for listing created, purchase, rare item sale, admin actions, custom item flagged, daily market summary, and storage errors.
+- Webhook delivery should be queued/batched and rate-limited.
+- Add readable local text logs for admin review and flagged custom item discovery even when SQL remains the source of truth.
 
-7. History, auditing, and recommendations
------------------------------------------
-Purpose:
-- separate admin audit history, player-facing sale history, and training data
-
-Current behavior:
-- admin history is mandatory for market actions and is stored in dedicated SQLite admin tables
-- player-facing sale history is stored as `SaleRecord` entries in SQLite `sales`
-- `InMemorySaleHistoryIndex` preloads recent sales for fast command/GUI reads
-- normal sale history uses exact market-key matching
-- enchanted-book sale history uses component matching:
-  - single-enchant book history includes mixed-book sales containing that enchant+level
-  - mixed-book history includes exact mixed sales plus matching single-enchant component sales
-- mixed enchanted books remain player-visible in sale history but are excluded from recommendation training
-- price history is stored as compact daily recommendation points in SQLite `price_history`
-- price-history GUI month navigation only shows months that actually have data
-- sale/price history GUI timestamps are rendered as simple server-local `yyyy-MM-dd HH:mm` values, not raw epoch milliseconds
-- price history remains disabled for mixed-enchant book groups because they do not train recommendations
-
-8. GUI and player input
+Current alpha checklist
 -----------------------
-Purpose:
-- make `/market` the primary player experience while keeping text commands available
+Keep these as the practical near-term tasks before another large feature wave.
 
-Current behavior:
-- `/market` opens the main GUI
-- `/market all`, `/market search <query>`, `/market list <quantity> <unitPrice>`, `/market pricecheck`, `/market history`, and `/market pricehistory` remain command paths
-- GUI search, listing, and relisting use short-lived per-player chat prompts because inventory GUIs are poor text/price-entry surfaces
-- prompt state is separate from menu sessions and keyed by player UUID
-- menu sessions/actions are also keyed by player UUID, keeping simultaneous players isolated
-- menu actions store only ids/tokens and always re-fetch live business data before mutation
-- pagination loads `pageSize + 1` so Next only renders when another page exists
-- price-history month navigation uses only months with stored history data
-- `menu.yml` validation warns and falls back on invalid slots, duplicate slots, invalid materials, and invalid custom model data
+Async/storage hardening:
+- Finish direct-write compliance. All remaining normal runtime writes should go through the queued write-behind path unless they are startup-load, explicit admin maintenance, or shutdown-flush operations.
+- Purge old direct append/save/delete APIs after queued replacements are confirmed. Methods like old `append(...)`, `saveOrReplace(...)`, `delete(...)`, and direct helper writes should become private, startup/admin-only, or be removed so future menu/service code cannot bypass the queue.
+- Convert price recalculation completion to snapshot -> delta -> memory update -> queued SQL batch. It should not require reload.
+- Convert runtime-state writes such as last global recalculation date to queued SQL batch.
+- Decide whether admin/custom metadata writes should use the same queue or remain explicit admin-only blocking operations. Prefer the queue unless blocking is required for command feedback.
+- Keep startup SQL reads async and guarded by runtime state.
+- Make `/market reload` targeted and async: reload config/menu/prices through specific command paths; do not synchronously reload all SQL-backed runtime data on the server thread.
+- Reload should coordinate with SQLite WAL and the same worker/maintenance gate used by writes. Do not create a second unsynchronized SQLite path for reload reads/writes.
+- Add a storage maintenance gate so purge/delete/VACUUM/checkpoint operations are mutually exclusive with the main write-behind worker.
+- Add storage recovery, not a degraded-mode dashboard: if a queued SQLite flush fails, pause marketplace actions, keep memory/queue intact, reconnect SQLite/Hikari, retry the same queued flush, and mark runtime FAILED only after recovery retries fail.
+- Add better shutdown-flush logging: number of pending batches/mutations, success/failure, and timeout behavior.
 
-9. Commands
------------
-Player-facing:
-- `/market`
-- `/market all`
-- `/market <category>`
-- `/market search [query]`
-- `/market list [quantity unitPrice]`
-- `/market pricecheck` or `/market pc`
-- `/market claim`
-- `/market claim earnings`
-- `/market history <display name>`
-- `/market pricehistory <display name> [menu]`
+GUI performance hardening:
+- Add a GUI template/model layer before adding more screens.
+- Cache static menu pieces: filler panes, border buttons, back/next/previous buttons, disabled buttons, static labels, and title formats.
+- Cache plain page models separately from Bukkit `Inventory` objects.
+- Add data-version invalidation so cached pages expire when listings, claims, prices, or categories change.
+- Use snapshots for async preparation of expensive pages/search/history results.
+- Keep Bukkit `Inventory`, `Player`, and final `ItemStack` rendering/opening on the main thread.
+- Convert one heavy screen first, likely listing browser or search results, then port sale history, price history, and category/group screens.
+- Consider evaluating a maintained Paper inventory GUI library before expanding the custom GUI system further.
 
-Admin-facing:
-- admin commands remain behind focused handlers under `MarketAdminCommand`
-- `/market storage` shows SQLite/table storage pressure and `/market storage cleanup` runs retention cleanup
-- player suggestions should prefer display names
-- admin suggestions may expose market keys where maintenance needs exact ids
+Market event/history merge: DONE
+- [x] Added canonical `MarketEventRecord`, `MarketEventType`, `SQLiteMarketEventStore`.
+- [x] Added `MarketEventService` interface + `DefaultMarketEventService` with in-memory indexes.
+- [x] Routed purchase/listing/cancel/expire/claim/relist events into the shared event stream.
+- [x] Admin history and player sale history read filtered projections from the shared event stream.
+- [x] Stopped writing duplicate records to separate sales/admin history stores.
+- [x] Deleted quarantined stores (`SQLiteSalesStore`, `SQLiteAdminHistoryStore`, `InMemorySaleHistoryIndex`).
 
-10. Alpha cutoff goals
-----------------------
-Done/current for alpha:
-- SQLite runtime storage path
-- GUI browsing and detail views
-- chat input for search/list/relist
-- pricecheck command for held-item recommendations
-- claim results with exact player feedback
-- price-history GUI path from item detail and `/market pricehistory <item> menu`, with data-aware month navigation
-- component-aware enchanted-book sale history
+Storage cleanup:
+- [x] Replaced storage-size-based event deletion with time-based retention (marketEventRetentionDays config, default 90 days).
+- [x] Active listings, item claims, and money claims are separate tables — not touched by event retention.
+- [x] maintenancePurgeEventsOlderThan(cutoff) is the only event purge path; called from StorageMaintenanceService.
+- [ ] Keep price checkpoints for configured months or daily checkpoint count.
+- [x] Cleanup runs on startup and via /market storage cleanup; no scheduled row deletion during gameplay.
+- [x] Cleanup is mutually exclusive with the write-behind queue (runExclusiveMaintenance gate).
+- [x] Retention purge is never mixed with normal write flushing.
 
-Known follow-up scans before hands-on server testing:
-- inspect command output for any remaining internal market-key leaks to normal players
-- review admin command UX and decide which flows should remain command-only for alpha
-- manually verify `menu.yml` slot defaults after applying patches
-- verify permissions in `plugin.yml` against `permissions.txt`, including `divinemarketplace.admin.storage`
-- local compile was reported successful by the project owner; continue to use real server startup logs for runtime validation
+Gameplay/market behavior:
+- Verify purchase/list/claim/cancel/relist lock coverage with spam-click tests.
+- Verify item claim delivery still handles full inventory safely.
+- Verify money claim payout cannot double-pay.
+- Verify listing merge/relist cannot duplicate stacks.
+- Verify seller listing capacity and My Listings capacity rendering after async/write-queue changes.
+- Verify mixed enchanted books stay excluded from price training but visible in history.
+- Verify unknown custom item/enchant flows still produce useful admin review records.
 
+Documentation/commenting:
+- Keep source comments focused on file responsibility, layer ownership, threading assumptions, persistence timing, and failure behavior.
+- Avoid reintroducing source-side TODO map classes. Keep planning in root docs.
+- Add package-level notes once package layout stabilizes.
 
-11. Source comments and docs
-----------------------------
-Purpose:
-- keep source comments useful for maintenance instead of preserving old planning notes
+Done/current
+------------
+Use this section to avoid re-planning completed items.
 
-Current behavior:
-- Java source files include a file-role comment near the package declaration describing the file's runtime responsibility
-- source comments should describe current behavior; root docs should carry open planning work
-- root planning stays in `plan.txt` and `PROJECT_STRUCTURE_TODO.md`; source-side planning maps should stay absent
-- YAML defaults include short header comments explaining what server owners can safely edit
+Storage:
+- SQLite/Hikari storage exists and compiles.
+- SQLite WAL is enabled.
+- Async startup loading has begun: runtime state now guards command/menu/scheduler entry points while storage is loading.
+- `SQLiteWriteBatch`, `SQLiteMutation`, and shared write-behind queue foundations exist.
+- Purchase/list/cancel/expire/claim/relist flows have moved toward memory mutation plus queued SQL batch.
+- Scheduled write-behind flushing exists.
+- Shutdown flush path exists.
+- Canonical market_events store implemented; SQLiteSalesStore/SQLiteAdminHistoryStore/InMemorySaleHistoryIndex deleted.
+- Time-based event retention implemented (marketEventRetentionDays, default 90 days).
+- Dead MarketAnalyticsService / DefaultMarketAnalyticsService deleted; analytics calls removed from ListingWriteHelper and DefaultListingService.
+- Maintenance-only storage methods renamed: maintenancePurgeEventsOlderThan, maintenancePurgeOldestAbandonedClaims, adminReplaceAll (market index).
+- Dead SQLiteMarketPriceStore.replaceAll() removed (no callers).
+- Redundant listingStore.flushPendingWritesBlocking() removed from disable() — writeBehindQueue.shutdownAndFlush() covers it.
+
+Concurrency:
+- Runtime state exists for STARTING, LOADING_STORAGE, READY, RECOVERING_STORAGE, FAILED, and DISABLING.
+- Commands, menus, and schedulers guard against non-READY runtime state.
+- Player/object action locks exist for dangerous menu actions.
+- Locks cover common duplicate-action risks such as purchase, listing cancel, item claim, money claim, and relist.
+- Queued SQLite flush failure now pauses marketplace actions, reconnects the SQLite/Hikari datasource, retries the queued blocking flush, and resumes READY only after the queue is durable again.
+
+GUI:
+- `/market` opens the GUI.
+- `/market claim` opens claims GUI.
+- GUI item detail supports owner, buyer, and admin modes.
+- GUI chat prompts exist for search/list/relist.
+- Pagination probes next page so Next only appears when another page has content.
+- Configured player listing capacity renders in My Listings.
+
+Known design debt:
+- GUI still rebuilds too much raw inventory/page state on each open/page turn.
+- Several lower-risk/background stores may still expose direct SQLite write methods.
+
+Feature backlog after alpha stability
+-------------------------------------
+- MySQL backend.
+- Discord webhooks from canonical market events.
+- Admin GUI for unknown/provisional custom items.
+- Admin GUI for unknown custom enchants.
+- Better market event export tools.
+- Storage recovery polish and emergency journal/export only if real failures show it is needed.
+- Optional async page/search cache metrics.
+- More aggressive memory indexes if listing count becomes large.

@@ -1,5 +1,5 @@
 # Default membership list for the redstone category.
-# Copied to plugins/DivineMarketplace/categories/ on first install; server edits are preserved on reload.
+# Internal seed data converted into plugins/DivineMarketplace/categories.csv; this file is not copied directly.
 categoryId: redstone
 items:
   - REDSTONE_TORCH
@@ -27,3 +27,23 @@ items:
   - LIGHTNING_ROD
   - SCULK_SENSOR
   - CALIBRATED_SCULK_SENSOR
+
+  # Paper 1.21.11 material coverage additions.
+  - COPPER_BULB
+  - EXPOSED_COPPER_BULB
+  - EXPOSED_LIGHTNING_ROD
+  - OXIDIZED_COPPER_BULB
+  - OXIDIZED_LIGHTNING_ROD
+  - POLISHED_BLACKSTONE_BUTTON
+  - STONE_BUTTON
+  - TNT
+  - WAXED_COPPER_BULB
+  - WAXED_EXPOSED_COPPER_BULB
+  - WAXED_EXPOSED_LIGHTNING_ROD
+  - WAXED_LIGHTNING_ROD
+  - WAXED_OXIDIZED_COPPER_BULB
+  - WAXED_OXIDIZED_LIGHTNING_ROD
+  - WAXED_WEATHERED_COPPER_BULB
+  - WAXED_WEATHERED_LIGHTNING_ROD
+  - WEATHERED_COPPER_BULB
+  - WEATHERED_LIGHTNING_ROD

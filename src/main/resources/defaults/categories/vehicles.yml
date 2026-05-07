@@ -1,5 +1,5 @@
 # Default membership list for the vehicles category.
-# Copied to plugins/DivineMarketplace/categories/ on first install; server edits are preserved on reload.
+# Internal seed data converted into plugins/DivineMarketplace/categories.csv; this file is not copied directly.
 categoryId: vehicles
 items:
   - MINECART
@@ -30,3 +30,21 @@ items:
   - SADDLE
   - CARROT_ON_A_STICK
   - WARPED_FUNGUS_ON_A_STICK
+
+  # Paper 1.21.11 material coverage additions.
+  - BLACK_HARNESS
+  - BLUE_HARNESS
+  - BROWN_HARNESS
+  - CYAN_HARNESS
+  - GRAY_HARNESS
+  - GREEN_HARNESS
+  - LIGHT_BLUE_HARNESS
+  - LIGHT_GRAY_HARNESS
+  - LIME_HARNESS
+  - MAGENTA_HARNESS
+  - ORANGE_HARNESS
+  - PINK_HARNESS
+  - PURPLE_HARNESS
+  - RED_HARNESS
+  - WHITE_HARNESS
+  - YELLOW_HARNESS

@@ -4,10 +4,10 @@ package divinejason.divinemarketplace.storage.sqlite;
 /*
  * File role: Base type for SQLite-backed stores that need access to the shared database wrapper.
  */
-import java.sql.*;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.sql.*;
 import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
@@ -226,6 +226,37 @@ public final class SQLiteStore {
         }
     }
 
+    /**
+     * Applies multiple table mutations on one write connection and one transaction.
+     * This is the foundation for the marketplace write-behind queue: services can
+     * update memory immediately, then enqueue one batch representing the durable
+     * SQL work for the action that already committed in memory.
+     */
+    public int applyBatch(SQLiteWriteBatch batch) throws SQLException {
+        Objects.requireNonNull(batch, "batch");
+        if (batch.isEmpty()) return 0;
+
+        try (Connection conn = connection()) {
+            boolean prevAutoCommit = conn.getAutoCommit();
+            conn.setAutoCommit(false);
+
+            try {
+                int total = 0;
+                long now = epochNow();
+                for (SQLiteMutation mutation : batch.mutations()) {
+                    total += applyMutation(conn, mutation, now);
+                }
+                conn.commit();
+                return total;
+            } catch (SQLException e) {
+                conn.rollback();
+                throw e;
+            } finally {
+                conn.setAutoCommit(prevAutoCommit);
+            }
+        }
+    }
+
     public CompletableFuture<Void> putAsync(String tableName, String id, String value) {
         return CompletableFuture.runAsync(() -> {
             try {
@@ -250,6 +281,16 @@ public final class SQLiteStore {
         return CompletableFuture.supplyAsync(() -> {
             try {
                 return deleteBatch(tableName, ids);
+            } catch (SQLException e) {
+                throw new CompletionException(e);
+            }
+        }, database.getWriteExecutor());
+    }
+
+    public CompletableFuture<Integer> applyBatchAsync(SQLiteWriteBatch batch) {
+        return CompletableFuture.supplyAsync(() -> {
+            try {
+                return applyBatch(batch);
             } catch (SQLException e) {
                 throw new CompletionException(e);
             }
@@ -328,6 +369,36 @@ public final class SQLiteStore {
 
     private Connection connection() throws SQLException {
         return database.getDataSource().getConnection();
+    }
+
+    private int applyMutation(Connection conn, SQLiteMutation mutation, long now) throws SQLException {
+        String table = qualifiedTable(mutation.tableName());
+        ensureTable(conn, table);
+
+        if (mutation.operation() == SQLiteMutation.Operation.DELETE) {
+            try (PreparedStatement st = conn.prepareStatement("DELETE FROM " + table + " WHERE id = ?;")) {
+                st.setString(1, mutation.id());
+                return st.executeUpdate();
+            }
+        }
+
+        try (PreparedStatement st = conn.prepareStatement(upsertSql(table))) {
+            st.setString(1, mutation.id());
+            st.setString(2, mutation.value());
+            st.setLong(3, now);
+            return Math.max(0, st.executeUpdate());
+        }
+    }
+
+    private void ensureTable(Connection conn, String qualifiedTable) throws SQLException {
+        String ddl = "CREATE TABLE IF NOT EXISTS " + qualifiedTable + " (" +
+                "  id         VARCHAR(128) PRIMARY KEY," +
+                "  value      TEXT         NOT NULL," +
+                "  updated_at BIGINT       NOT NULL" +
+                ");";
+        try (Statement st = conn.createStatement()) {
+            st.execute(ddl);
+        }
     }
 
     private String qualifiedTable(String tableName) {

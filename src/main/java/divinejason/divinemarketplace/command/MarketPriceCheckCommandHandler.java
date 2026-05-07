@@ -5,12 +5,11 @@ package divinejason.divinemarketplace.command;
  * File role: Handles player-facing market price check command subcommands and translates service results into chat/GUI feedback.
  */
 import divinejason.divinemarketplace.auction.model.ResolvedItemDefinition;
+import java.util.Collection;
+import java.util.List;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
-
-import java.util.Collection;
-import java.util.List;
 
 /** Player-facing held-item recommendation lookup. */
 final class MarketPriceCheckCommandHandler implements MarketPlayerCommandHandler {

@@ -1,5 +1,5 @@
 # Default membership list for the cut blocks category.
-# Copied to plugins/DivineMarketplace/categories/ on first install; server edits are preserved on reload.
+# Internal seed data converted into plugins/DivineMarketplace/categories.csv; this file is not copied directly.
 categoryId: cut_blocks
 items:
   - STONE_BRICKS
@@ -162,3 +162,23 @@ items:
   - WAXED_WEATHERED_CUT_COPPER_STAIRS
   - WAXED_OXIDIZED_CUT_COPPER_STAIRS
   - QUARTZ_PILLAR
+
+  # Paper 1.21.11 material coverage additions.
+  - CHISELED_COPPER
+  - CRACKED_POLISHED_BLACKSTONE_BRICKS
+  - CUT_RED_SANDSTONE_SLAB
+  - CUT_SANDSTONE_SLAB
+  - EXPOSED_CHISELED_COPPER
+  - OXIDIZED_CHISELED_COPPER
+  - POLISHED_BLACKSTONE_BRICKS
+  - SMOOTH_RED_SANDSTONE_SLAB
+  - SMOOTH_RED_SANDSTONE_STAIRS
+  - SMOOTH_SANDSTONE_SLAB
+  - SMOOTH_SANDSTONE_STAIRS
+  - SMOOTH_STONE
+  - SMOOTH_STONE_SLAB
+  - WAXED_CHISELED_COPPER
+  - WAXED_EXPOSED_CHISELED_COPPER
+  - WAXED_OXIDIZED_CHISELED_COPPER
+  - WAXED_WEATHERED_CHISELED_COPPER
+  - WEATHERED_CHISELED_COPPER

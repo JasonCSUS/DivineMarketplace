@@ -1,5 +1,5 @@
 # Default membership list for the building blocks category.
-# Copied to plugins/DivineMarketplace/categories/ on first install; server edits are preserved on reload.
+# Internal seed data converted into plugins/DivineMarketplace/categories.csv; this file is not copied directly.
 categoryId: building_blocks
 items:
   - STONE
@@ -102,3 +102,33 @@ items:
   - MUSHROOM_STEM
   - BROWN_MUSHROOM_BLOCK
   - RED_MUSHROOM_BLOCK
+
+  # Paper 1.21.11 material coverage additions.
+  - AMETHYST_BLOCK
+  - ANDESITE
+  - BUDDING_AMETHYST
+  - CREAKING_HEART
+  - DIORITE
+  - DIRT_PATH
+  - DRIED_KELP_BLOCK
+  - EXPOSED_COPPER
+  - FARMLAND
+  - GRANITE
+  - INFESTED_CHISELED_STONE_BRICKS
+  - INFESTED_COBBLESTONE
+  - INFESTED_CRACKED_STONE_BRICKS
+  - INFESTED_DEEPSLATE
+  - INFESTED_MOSSY_STONE_BRICKS
+  - INFESTED_STONE
+  - INFESTED_STONE_BRICKS
+  - OXIDIZED_COPPER
+  - PRISMARINE
+  - RESIN_BLOCK
+  - SNOW
+  - TEST_BLOCK
+  - TEST_INSTANCE_BLOCK
+  - WAXED_COPPER_BLOCK
+  - WAXED_EXPOSED_COPPER
+  - WAXED_OXIDIZED_COPPER
+  - WAXED_WEATHERED_COPPER
+  - WEATHERED_COPPER

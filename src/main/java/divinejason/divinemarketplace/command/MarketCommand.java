@@ -5,38 +5,38 @@ package divinejason.divinemarketplace.command;
  * File role: Dispatches /market subcommands, opens GUI entry points, and delegates admin/player work to focused handlers.
  */
 import divinejason.divinemarketplace.DivineMarketplace;
-import divinejason.divinemarketplace.auction.persistence.sqlite.SQLiteCustomEnchantStore;
-import divinejason.divinemarketplace.auction.persistence.sqlite.SQLiteCustomItemOverrideStore;
-import divinejason.divinemarketplace.auction.persistence.sqlite.SQLiteListingStore;
-import divinejason.divinemarketplace.auction.service.AdminHistoryExportService;
-import divinejason.divinemarketplace.auction.service.CategoryService;
-import divinejason.divinemarketplace.auction.service.ClaimService;
-import divinejason.divinemarketplace.auction.service.CustomItemCollisionLogService;
-import divinejason.divinemarketplace.auction.service.CustomItemMetadataLogService;
-import divinejason.divinemarketplace.auction.service.CustomItemRegistry;
-import divinejason.divinemarketplace.auction.service.CustomItemTypeExtractor;
-import divinejason.divinemarketplace.auction.service.DefaultAdminHistoryService;
-import divinejason.divinemarketplace.auction.service.FlattenedMarketIndexService;
-import divinejason.divinemarketplace.auction.service.HistoryService;
-import divinejason.divinemarketplace.auction.service.ItemIdentityResolver;
-import divinejason.divinemarketplace.auction.service.ListingService;
-import divinejason.divinemarketplace.auction.service.MarketRecalculationService;
-import divinejason.divinemarketplace.auction.service.PriceRecommendationService;
-import divinejason.divinemarketplace.auction.service.StoredEnchantExtractor;
+import divinejason.divinemarketplace.auction.registry.custom.CustomItemCollisionLogService;
+import divinejason.divinemarketplace.auction.registry.custom.CustomItemMetadataLogService;
+import divinejason.divinemarketplace.auction.registry.custom.CustomItemRegistry;
+import divinejason.divinemarketplace.auction.service.admin.AdminHistoryExportService;
+import divinejason.divinemarketplace.auction.service.admin.DefaultAdminHistoryService;
+import divinejason.divinemarketplace.auction.service.category.CategoryService;
+import divinejason.divinemarketplace.auction.service.category.FlattenedMarketIndexService;
+import divinejason.divinemarketplace.auction.service.claim.ClaimService;
+import divinejason.divinemarketplace.auction.service.history.HistoryService;
+import divinejason.divinemarketplace.auction.service.identity.CustomItemTypeExtractor;
+import divinejason.divinemarketplace.auction.service.identity.ItemIdentityResolver;
+import divinejason.divinemarketplace.auction.service.identity.StoredEnchantExtractor;
+import divinejason.divinemarketplace.auction.service.listing.ListingService;
+import divinejason.divinemarketplace.auction.service.enchant.DefaultEnchantmentMetadataService;
+import divinejason.divinemarketplace.auction.service.pricing.MarketRecalculationService;
+import divinejason.divinemarketplace.auction.service.pricing.PriceRecommendationService;
+import divinejason.divinemarketplace.auction.storage.sqlite.SQLiteCustomItemOverrideStore;
+import divinejason.divinemarketplace.auction.storage.sqlite.SQLiteListingStore;
 import divinejason.divinemarketplace.menu.MenuController;
-import divinejason.divinemarketplace.prompt.MarketChatPromptService;
 import divinejason.divinemarketplace.menu.MenuSession;
 import divinejason.divinemarketplace.menu.MenuView;
+import divinejason.divinemarketplace.prompt.MarketChatPromptService;
 import io.papermc.paper.command.brigadier.BasicCommand;
 import io.papermc.paper.command.brigadier.CommandSourceStack;
-import org.bukkit.command.CommandSender;
-import org.jspecify.annotations.NullMarked;
-
 import java.util.Collection;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
+import java.util.function.BooleanSupplier;
+import org.bukkit.command.CommandSender;
+import org.jspecify.annotations.NullMarked;
 
 @NullMarked
 public final class MarketCommand implements BasicCommand {
@@ -45,6 +45,7 @@ public final class MarketCommand implements BasicCommand {
     private final MenuController menuController;
     private final MarketBrowseCommandHandler browseCommand;
     private final List<MarketPlayerCommandHandler> playerHandlers;
+    private final BooleanSupplier readinessCheck;
 
     public MarketCommand(
             DivineMarketplace plugin,
@@ -62,13 +63,15 @@ public final class MarketCommand implements BasicCommand {
             ItemIdentityResolver itemIdentityResolver,
             CustomItemRegistry customItemRegistry,
             MarketRecalculationService marketRecalculationService,
-            SQLiteCustomEnchantStore customEnchantStore,
+            DefaultEnchantmentMetadataService enchantmentMetadataService,
             CustomItemTypeExtractor customItemTypeExtractor,
             CustomItemMetadataLogService customItemMetadataLogService,
             SQLiteCustomItemOverrideStore customItemOverrideStore,
             CustomItemCollisionLogService customItemCollisionLogService,
-            StoredEnchantExtractor storedEnchantExtractor
+            StoredEnchantExtractor storedEnchantExtractor,
+            BooleanSupplier readinessCheck
     ) {
+        this.readinessCheck = readinessCheck;
         this.menuController = menuController;
         this.context = new MarketPlayerCommandContext(
                 listingService,
@@ -99,7 +102,7 @@ public final class MarketCommand implements BasicCommand {
                 priceRecommendationService,
                 customItemRegistry,
                 marketRecalculationService,
-                customEnchantStore,
+                enchantmentMetadataService,
                 customItemTypeExtractor,
                 customItemMetadataLogService,
                 customItemOverrideStore,
@@ -111,6 +114,10 @@ public final class MarketCommand implements BasicCommand {
     @Override
     public void execute(CommandSourceStack source, String[] args) {
         CommandSender sender = source.getSender();
+        if (!readinessCheck.getAsBoolean()) {
+            sender.sendRichMessage("<yellow>The market is still loading. Try again in a moment.</yellow>");
+            return;
+        }
         try {
             if (args.length == 0) {
                 var player = context.requirePlayer(sender);

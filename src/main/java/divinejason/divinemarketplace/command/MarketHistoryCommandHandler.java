@@ -8,14 +8,13 @@ import divinejason.divinemarketplace.auction.model.RecommendationHistoryPoint;
 import divinejason.divinemarketplace.auction.model.SaleRecord;
 import divinejason.divinemarketplace.menu.MenuSession;
 import divinejason.divinemarketplace.menu.MenuView;
-import org.bukkit.command.CommandSender;
-import org.bukkit.entity.Player;
-
 import java.time.Instant;
 import java.time.YearMonth;
 import java.time.ZoneId;
 import java.util.Collection;
 import java.util.List;
+import org.bukkit.command.CommandSender;
+import org.bukkit.entity.Player;
 
 final class MarketHistoryCommandHandler implements MarketPlayerCommandHandler {
     private final MarketPlayerCommandContext context;

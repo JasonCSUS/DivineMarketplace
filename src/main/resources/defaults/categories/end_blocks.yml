@@ -1,5 +1,5 @@
 # Default membership list for the end blocks category.
-# Copied to plugins/DivineMarketplace/categories/ on first install; server edits are preserved on reload.
+# Internal seed data converted into plugins/DivineMarketplace/categories.csv; this file is not copied directly.
 categoryId: end_blocks
 items:
   - END_STONE
